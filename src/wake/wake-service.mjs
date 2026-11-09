@@ -32,7 +32,8 @@ export class WakeService {
       configured: Boolean(config.targetChatId && isAllowed(bot, config.targetChatId)),
       mode: config.scheduleMode === 'random' ? 'random' : 'fixed',
       intervalMinutes: config.intervalMinutes, randomMinMinutes: config.randomMinMinutes,
-      randomMaxMinutes: config.randomMaxMinutes, quietStart: config.quietStart, quietEnd: config.quietEnd,
+      randomMaxMinutes: config.randomMaxMinutes, quietHoursEnabled: config.quietHoursEnabled !== false,
+      quietStart: config.quietStart, quietEnd: config.quietEnd,
       dailyLimit: config.dailyLimit, todayCount: runtime.date === localDate(this.now()) ? runtime.count || 0 : 0,
       nextAttemptAt, lastAttemptAt: runtime.lastAttemptAt || null,
       lastSentAt: runtime.lastSentAt || null, lastResult: runtime.lastResult || null,
@@ -51,7 +52,7 @@ export class WakeService {
     state.bots = { ...(state.bots || {}), [bot.id]: current };
     const randomMode = config.scheduleMode === 'random';
     if (randomMode && !this.#randomDue(config, current, now)) return;
-    if (inQuietHours(now, config.quietStart, config.quietEnd)) {
+    if (config.quietHoursEnabled !== false && inQuietHours(now, config.quietStart, config.quietEnd)) {
       if (randomMode) this.#scheduleNext(config, current, now);
       return;
     }

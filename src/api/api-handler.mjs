@@ -1,6 +1,8 @@
 import { readJson } from '../http/body.mjs';
 import { json } from '../http/responses.mjs';
 import { normalizeSettings } from '../config/validate.mjs';
+import { normalizeConnection } from '../control/validate.mjs';
+import { prepareConnectionInput } from '../control/connection-input.mjs';
 
 export function createApiHandler(services) {
   const { settingsStore, personaStore, controlPlaneStore, secretStore, manager, engines, pairing, telegramService, wechatService,
@@ -27,8 +29,8 @@ export function createApiHandler(services) {
       return json(response, 200, await publicControlPlane(await controlPlaneStore.get(), secretStore, telegramService, wechatService), headers);
     }
     if (request.method === 'POST' && path === '/api/connections') {
-      const body = await readJson(request); const saved = await controlPlaneStore.upsertConnection(body);
-      if (body.secret) await secretStore.write(`connection:${saved.id}`, body.secret);
+      const prepared = prepareConnectionInput(await readJson(request)); const saved = await controlPlaneStore.upsertConnection(prepared.body);
+      if (prepared.secret) await secretStore.write(`connection:${saved.id}`, prepared.secret);
       return json(response, 201, await decorateConnection(saved, secretStore), headers);
     }
     if (request.method === 'POST' && path === '/api/connections/test') {
@@ -38,8 +40,9 @@ export function createApiHandler(services) {
     }
     const connectionId = resourceId(path, '/api/connections/');
     if (connectionId && request.method === 'PUT') {
-      const body = await readJson(request); const saved = await controlPlaneStore.upsertConnection({ ...body, id: connectionId });
-      if (body.secret) await secretStore.write(`connection:${saved.id}`, body.secret);
+      const prepared = prepareConnectionInput({ ...(await readJson(request)), id: connectionId });
+      const saved = await controlPlaneStore.upsertConnection(prepared.body);
+      if (prepared.secret) await secretStore.write(`connection:${saved.id}`, prepared.secret);
       return json(response, 200, await decorateConnection(saved, secretStore), headers);
     }
     if (connectionId && request.method === 'DELETE') {
@@ -136,6 +139,15 @@ export function createApiHandler(services) {
       if (!connection) throw Object.assign(new Error('请先保存连接预设'), { statusCode: 409 });
       const purpose = ['chat', 'tts', 'stt', 'image'].includes(url.searchParams.get('purpose')) ? url.searchParams.get('purpose') : 'chat';
       return json(response, 200, await engines.capabilityFor(connection, { purpose }), headers);
+    }
+    if (request.method === 'POST' && path === '/api/models/preview') {
+      const raw = await readJson(request); const prepared = prepareConnectionInput(raw.connection || raw);
+      const id = prepared.body.id || `preview-${Date.now()}`;
+      const connection = normalizeConnection({ ...prepared.body, id, cachedModels: prepared.body.cachedModels || [] });
+      if (!connection) throw Object.assign(new Error('请选择连接类型'), { statusCode: 400 });
+      const savedSecret = prepared.secret || (prepared.body.id ? await secretStore.read(`connection:${prepared.body.id}`) : '');
+      const purpose = ['chat', 'tts', 'stt', 'image'].includes(raw.purpose) ? raw.purpose : 'chat';
+      return json(response, 200, await engines.capabilityForDraft(connection, savedSecret || '', { purpose }), headers);
     }
     if (request.method === 'GET' && path === '/api/mcp/tools') {
       const connectionId = url.searchParams.get('connectionId'); if (!connectionId) throw Object.assign(new Error('缺少 connectionId'), { statusCode: 400 });

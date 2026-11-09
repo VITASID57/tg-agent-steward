@@ -4,8 +4,10 @@ import { refreshBotSections } from './bot-sections.js';
 
 let pollTimer = null;
 let pollBusy = false;
+let ensureBotSaved = null;
 
-export function bindWechatEditor(app) {
+export function bindWechatEditor(app, saveDraft) {
+  ensureBotSaved = saveDraft;
   $('#bot-channel').onchange = showChannelFields;
   $('#wechat-login-start').onclick = () => startLogin(app);
   $('#wechat-disconnect').onclick = () => disconnect(app);
@@ -17,7 +19,7 @@ export function fillWechatEditor(item) {
   clearPolling();
   $('#wechat-login-box').hidden = true;
   $('#wechat-verify-box').hidden = true;
-  $('#wechat-login-start').disabled = !item;
+  $('#wechat-login-start').disabled = false;
   $('#wechat-disconnect').disabled = !item?.hasWechatAccount;
   showChannelFields();
 }
@@ -42,11 +44,12 @@ async function createWechatPairCode() {
 }
 
 async function startLogin(app) {
-  const botId = $('#bot-id').value;
-  if (!botId) return toast('请先保存这张微信 Bot 卡，再获取二维码', true);
+  let botId = $('#bot-id').value;
   clearPolling();
   $('#wechat-login-start').disabled = true; $('#wechat-login-state').textContent = '正在获取二维码…';
   try {
+    if (!botId) { $('#wechat-login-state').textContent = '正在保存当前设置…'; botId = await ensureBotSaved?.(); }
+    if (!botId) throw new Error('没有成功保存这张 Bot 卡');
     const result = await api('/api/wechat/login/start', { method: 'POST', body: jsonBody({ botId }) });
     $('#wechat-qr-image').src = result.image; $('#wechat-login-box').hidden = false;
     $('#wechat-login-state').textContent = '等待扫码';

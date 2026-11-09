@@ -1,5 +1,6 @@
 import { api, jsonBody } from './api.js';
 import { $, id, options, toast } from './dom.js';
+import { resourceSaved } from './resource-browser.js';
 
 const TEMPLATES = Object.freeze({
   general: {
@@ -12,7 +13,7 @@ const TEMPLATES = Object.freeze({
   },
   wechat: {
     title: '微信场景建议', surface: 'wechat', scope: 'all',
-    body: '当前通过微信私聊交流。不要输出 Telegram 命令或依赖 Telegram 客户端的交互形式；语音回复可能显示为音频文件。',
+    body: '当前通过微信私聊交流。只使用微信支持的交互形式；语音回复可能显示为音频文件。',
   },
   tools: {
     title: '工具与事实建议', surface: 'all', scope: 'all',
@@ -32,10 +33,9 @@ export function bindProfileEditor(app) {
 
 export function refreshProfileEditor(app) {
   options($('#profile-picker'), app.data.profiles.map(named), $('#profile-id').value, '新建人物');
-  fillProfileEditor(app, $('#profile-picker').value || app.data.profiles[0]?.id || '');
 }
 
-function fillProfileEditor(app, itemId) {
+export function fillProfileEditor(app, itemId) {
   const item = app.data.profiles.find((entry) => entry.id === itemId); $('#profile-id').value = item?.id || '';
   $('#profile-picker').value = item?.id || '';
   const users = item ? app.data.bots.filter((bot) => bot.profileId === item.id).map((bot) => bot.name) : [];
@@ -58,8 +58,9 @@ async function saveProfile(event, app) {
   const blocks = [...$('#profile-blocks').children].map((node) => ({ id: node.dataset.id, title: $('.block-title', node).value,
     body: $('.block-body', node).value, enabled: $('.block-enabled', node).checked,
     surface: $('.block-surface', node).value, scope: $('.block-scope', node).value }));
-  const body = { name: $('#profile-name').value, source: $('#profile-source').value, blocks };
-  await api(existingId ? `/api/profiles/${encodeURIComponent(existingId)}` : '/api/profiles', { method: existingId ? 'PUT' : 'POST', body: jsonBody(body) });
+  const body = { name: $('#profile-name').value, source: 'local', blocks };
+  const saved = await api(existingId ? `/api/profiles/${encodeURIComponent(existingId)}` : '/api/profiles', { method: existingId ? 'PUT' : 'POST', body: jsonBody(body) });
+  resourceSaved('profiles', saved.id);
   toast('人物与规则预设已保存；Bot 下一轮自动使用新版本'); await app.reload();
 }
 

@@ -50,7 +50,7 @@ export class ToolBroker {
 
   async #client(connection) {
     const secret = await this.secretStore.read(`connection:${connection.id}`);
-    if (connection.kind === 'mcp-remote') return new McpRemoteClient({ connection, secret, fetchImpl: this.fetch });
+    if (['mcp-remote', 'memory-mcp'].includes(connection.kind)) return new McpRemoteClient({ connection, secret, fetchImpl: this.fetch });
     if (connection.kind === 'mcp-stdio') return new McpStdioClient({ connection, secret, spawnImpl: this.spawn });
     throw new Error(`不是 MCP 连接：${connection.kind}`);
   }

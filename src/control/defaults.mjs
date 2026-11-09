@@ -14,7 +14,8 @@ export function capabilitiesFor(kind) {
   if (kind === 'elevenlabs') return ['tts', 'stt'];
   if (['minimax', 'gpt-sovits', 'edge-tts'].includes(kind)) return ['tts'];
   if (kind === 'whisper-local') return ['stt'];
-  if (['memory-http', 'memory-mcp'].includes(kind)) return ['memory'];
+  if (kind === 'memory-http') return ['memory'];
+  if (kind === 'memory-mcp') return ['memory', 'tools'];
   if (['novelai', 'comfyui'].includes(kind)) return ['image'];
   if (['mcp-remote', 'mcp-stdio'].includes(kind)) return ['tools'];
   return [];
@@ -57,7 +58,8 @@ export function defaultControlPlane(legacy = {}) {
       stickers: { enabled: false, packIds: [], replyProbability: 30 },
       wake: {
         enabled: false, targetChatId: null, scheduleMode: 'random', intervalMinutes: 60,
-        randomMinMinutes: 45, randomMaxMinutes: 120, quietStart: '23:00', quietEnd: '08:00',
+        randomMinMinutes: 45, randomMaxMinutes: 120, quietHoursEnabled: false,
+        quietStart: '23:00', quietEnd: '08:00',
         dailyLimit: 3, cooldownMinutes: 120, prompt: '看看最近的对话和记忆，只有确实有想说的话时才主动联系。没有就只回复 [[SILENT]]。',
       },
       memoryConnectionId: null, createdAt: now, updatedAt: now,

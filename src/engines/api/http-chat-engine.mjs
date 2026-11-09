@@ -134,10 +134,11 @@ export class HttpChatEngine {
 
   async #vertexModels(purpose) {
     if (!this.connection.baseUrl || !this.secret) return [];
-    const data = await requestJson(this.fetch, endpoint(this.connection.baseUrl, '/models'), {
+    const data = await requestJson(this.fetch, vertexCatalogUrl(this.connection.baseUrl), {
       headers: vertexHeaders(this.secret, this.connection.options),
     }, undefined, 30_000);
-    const entries = Array.isArray(data?.models) ? data.models : data?.data;
+    const entries = Array.isArray(data?.publisherModels) ? data.publisherModels
+      : (Array.isArray(data?.models) ? data.models : data?.data);
     return modelItems(entries, 'displayName').map((item) => ({ ...item, id: item.id.split('/').at(-1) }))
       .filter((item) => purpose !== 'tts' || /tts|audio|speech/iu.test(item.id))
       .filter((item) => purpose !== 'image' || /image|imagen/iu.test(item.id));
@@ -163,7 +164,10 @@ function builtInModels(kind, purpose) {
   const catalogs = {
     minimax: { tts: ['speech-2.8-hd', 'speech-2.8-turbo'] },
     elevenlabs: { tts: ['eleven_v4', 'eleven_v4_turbo', 'eleven_v3', 'eleven_multilingual_v2', 'eleven_flash_v2_5'], stt: ['scribe_v2'] },
-    'vertex-ai': { tts: ['gemini-2.5-flash-tts'], image: ['gemini-2.5-flash-image'] },
+    'vertex-ai': {
+      chat: ['gemini-3.5-pro', 'gemini-3.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash'],
+      tts: ['gemini-2.5-flash-tts'], image: ['gemini-2.5-flash-image', 'imagen-4.0-generate-001'],
+    },
     novelai: { image: ['nai-diffusion-4-full'] },
   };
   return (catalogs[kind]?.[purpose] || []).map((id) => ({ id, name: id }));
@@ -189,6 +193,13 @@ async function requestJson(fetchImpl, url, init, signal, timeoutMs = TIMEOUT_MS)
 function endpoint(base, suffix) {
   const value = base.replace(/\/+$/u, '');
   return value.endsWith(suffix) ? value : `${value}${suffix}`;
+}
+function vertexCatalogUrl(base) {
+  const url = new URL(base);
+  const match = url.pathname.match(/^\/v1\/projects\/[^/]+\/locations\/([^/]+)\/publishers\/google(?:\/models(?:\/[^/:]+(?::[^/]+)?)?)?$/u);
+  const requestedLocation = match?.[1] || 'us-central1';
+  const location = requestedLocation === 'global' ? 'us-central1' : requestedLocation;
+  return `${url.protocol}//${location}-aiplatform.googleapis.com/v1/publishers/google/models?listAllVersions=false`;
 }
 function vertexHeaders(secret, options = {}) { return (options.authStyle || options.authType || 'api-key') === 'bearer' ? { Authorization: `Bearer ${secret}` } : { 'x-goog-api-key': secret }; }
 function responseText(data) {

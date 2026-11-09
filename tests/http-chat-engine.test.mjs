@@ -41,6 +41,18 @@ test('Vertex connection can use an OAuth bearer token', async () => {
   assert.equal(authorization, 'Bearer oauth-token');
 });
 
+test('Vertex model catalog uses the official regional Model Garden list endpoint', async () => {
+  let requested = '';
+  const engine = new HttpChatEngine({ connection: { id: 'vertex', kind: 'vertex-ai',
+    baseUrl: 'https://aiplatform.googleapis.com/v1/projects/project-1/locations/global/publishers/google', cachedModels: [], options: {} },
+  secret: 'google-key', sessions: sessions(), fetchImpl: async (url) => {
+    requested = String(url); return Response.json({ publisherModels: [{ name: 'publishers/google/models/gemini-2.5-flash', displayName: 'Gemini Flash' }] });
+  } });
+  const result = await engine.capabilities({ purpose: 'chat' });
+  assert.equal(result.source, 'live'); assert.equal(result.models[0].id, 'gemini-2.5-flash');
+  assert.equal(requested, 'https://us-central1-aiplatform.googleapis.com/v1/publishers/google/models?listAllVersions=false');
+});
+
 test('ElevenLabs voice catalog is pulled and filtered for text to speech', async () => {
   const engine = new HttpChatEngine({ connection: { id: 'voice', kind: 'elevenlabs', baseUrl: 'https://api.elevenlabs.io', cachedModels: [], options: {} },
     secret: 'voice-key', sessions: sessions(), fetchImpl: async (url, init) => {

@@ -21,6 +21,14 @@ test('quiet hours work across midnight', () => {
   assert.equal(inQuietHours(new Date('2026-11-07T12:00:00'), '23:00', '08:00'), false);
 });
 
+test('a bot can disable quiet hours without deleting the saved times', async () => {
+  const file = memoryFile({ bots: {} }); let calls = 0;
+  const active = { ...bot(), wake: { ...bot().wake, quietHoursEnabled: false } };
+  const service = new WakeService({ controlPlaneStore: { async get() { return { bots: [active] }; } }, stateFile: file,
+    now: () => new Date('2026-11-07T23:30:00'), send: async () => { calls += 1; return { sent: true }; } });
+  await service.tick(); assert.equal(calls, 1);
+});
+
 test('random wake schedules a fresh time after every due run', async () => {
   let now = new Date('2026-11-07T10:00:00Z'); const calls = []; const file = memoryFile({ bots: {} });
   const randomBot = { ...bot(), channel: { type: 'telegram' }, wake: { ...bot().wake,

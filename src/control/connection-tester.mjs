@@ -1,6 +1,6 @@
 const LIVE_SOURCES = new Set(['live']);
 const CLI_KINDS = new Set(['codex', 'claude', 'grok-build']);
-const MCP_KINDS = new Set(['mcp-remote', 'mcp-stdio']);
+const MCP_KINDS = new Set(['mcp-remote', 'mcp-stdio', 'memory-mcp']);
 
 export class ConnectionTester {
   constructor({ controlPlaneStore, secretStore, engines, toolBroker, now = () => new Date() }) {

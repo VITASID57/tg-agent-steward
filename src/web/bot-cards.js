@@ -27,6 +27,10 @@ export function botSaved(id) {
   $('#bot-id').value = id || '';
 }
 
+export function botDraftSaved(id) {
+  selected = id; dirty = false; mode = 'edit'; $('#bot-id').value = id;
+}
+
 export function refillBotEditor(app, fillBot) {
   currentApp = app; fillEditor = fillBot;
   if (selected && !app.data.bots.some((bot) => bot.id === selected)) { selected = null; mode = 'list'; dirty = false; }
@@ -44,6 +48,9 @@ function openDetail(id) {
   if (!id) return;
   selected = id; mode = 'detail'; dirty = false; render(currentApp, 'forward');
 }
+
+export function openBotDetail(id) { openDetail(id); }
+export function openBotEditor(id) { openEditor(id); }
 
 function openEditor(id) {
   selected = id; mode = 'edit'; dirty = false;

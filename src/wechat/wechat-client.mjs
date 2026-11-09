@@ -106,7 +106,7 @@ export async function requestWechatQr(fetchImpl = fetch) {
   });
   const payload = parseJson(await response.text());
   if (!response.ok || !payload.qrcode || !payload.qrcode_img_content) throw new Error('暂时没有拿到微信登录二维码');
-  return { code: payload.qrcode, image: payload.qrcode_img_content };
+  return { code: payload.qrcode, image: qrImageSource(payload.qrcode_img_content) };
 }
 
 export async function pollWechatQr(code, fetchImpl = fetch, options = {}) {
@@ -149,4 +149,10 @@ function safeBaseUrl(value) {
 function parseJson(value) {
   try { return JSON.parse(value); }
   catch { throw new Error('微信通道返回了无法识别的数据'); }
+}
+
+function qrImageSource(value) {
+  const image = String(value || '').trim();
+  if (/^(?:data:image\/|https?:\/\/)/iu.test(image)) return image;
+  return `data:image/png;base64,${image.replace(/\s+/gu, '')}`;
 }

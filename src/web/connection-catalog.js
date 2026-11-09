@@ -14,19 +14,43 @@ export function fillConnectionCatalog(connection) {
 }
 
 async function refreshConnectionCatalog(connection) {
-  const purpose = primaryPurpose(connection);
+  const draft = draftConnection(connection); const purpose = primaryPurpose(draft);
   await loadModelPicker({
-    select: $('#connection-model-catalog'), connectionId: connection?.id, purpose,
+    select: $('#connection-model-catalog'), connectionId: connection?.id, purpose, preview: draft,
     button: $('#connection-model-refresh'), status: $('#connection-model-status'), emptyLabel: '由连接自动选择',
     onLoaded: (result) => { if (result.models?.length) $('#connection-models').value = result.models.map((item) => item.id).join(', '); },
   });
-  if (!connection?.capabilities?.includes('stt')) {
+  if (!draft.capabilities?.includes('stt')) {
     $('#connection-stt-model').replaceChildren(new Option('这类连接不使用语音识别模型', ''));
     $('#connection-stt-model').disabled = true;
     return;
   }
-  await loadModelPicker({ select: $('#connection-stt-model'), connectionId: connection.id, purpose: 'stt',
-    selected: connection.options?.transcriptionModel || '', emptyLabel: '由连接自动选择' });
+  await loadModelPicker({ select: $('#connection-stt-model'), connectionId: connection?.id, preview: draft, purpose: 'stt',
+    selected: connection?.options?.transcriptionModel || '', emptyLabel: '由连接自动选择' });
+}
+
+function draftConnection(connection) {
+  const kind = $('#connection-kind').value || connection?.kind || 'openai-compatible';
+  return {
+    id: connection?.id || '', name: $('#connection-name').value || connection?.name || '临时连接', kind,
+    baseUrl: $('#connection-url').value, secret: $('#connection-secret').value,
+    cachedModels: connection?.cachedModels || [], capabilities: capabilities(kind),
+    options: { ...(connection?.options || {}), apiStyle: $('#connection-api-style').value,
+      groupId: $('#connection-group-id').value, authType: $('#connection-auth-type').value,
+      authName: $('#connection-auth-name').value },
+  };
+}
+
+function capabilities(kind) {
+  if (['codex', 'grok-build'].includes(kind)) return ['chat', 'image'];
+  if (['claude', 'anthropic-compatible'].includes(kind)) return ['chat'];
+  if (kind === 'openai-compatible') return ['chat', 'stt', 'image'];
+  if (kind === 'vertex-ai') return ['chat', 'tts', 'stt', 'image'];
+  if (kind === 'elevenlabs') return ['tts', 'stt'];
+  if (['minimax', 'gpt-sovits', 'edge-tts'].includes(kind)) return ['tts'];
+  if (kind === 'whisper-local') return ['stt'];
+  if (['novelai', 'comfyui'].includes(kind)) return ['image'];
+  return [];
 }
 
 function primaryPurpose(connection) {

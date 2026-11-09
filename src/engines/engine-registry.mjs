@@ -19,6 +19,17 @@ export class EngineRegistry {
     catch (error) { return { available: false, error: error.message, models: connection.cachedModels.map((id) => ({ id, name: id, efforts: [] })), efforts: [] }; }
   }
 
+  async capabilityForDraft(connection, secret = '', options = {}) {
+    try {
+      const fixed = this.engines.get(connection.kind);
+      if (fixed) return await fixed.capabilities(options);
+      if (!this.apiEngineFactory || !this.apiSessions) throw new Error(`不支持的连接：${connection.kind}`);
+      return await this.apiEngineFactory({ connection, secret, sessions: this.apiSessions }).capabilities(options);
+    } catch (error) {
+      return { available: false, error: error.message, models: connection.cachedModels?.map((id) => ({ id, name: id, efforts: [] })) || [], efforts: [] };
+    }
+  }
+
   get(id) {
     const engine = this.engines.get(id);
     if (!engine) throw Object.assign(new Error(`不支持的引擎：${id}`), { statusCode: 400 });

@@ -24,3 +24,12 @@ test('tool broker blocks unmarked write-capable tools by default', async () => {
   const bot = { tools: { enabled: true, connectionIds: ['shop'], allowedToolNames: [], allowWrites: false } };
   await assert.rejects(broker.callForBot(bot, 'create_order', {}), /可能产生下单/);
 });
+
+test('one memory MCP connection can also provide the bot tool catalog', async () => {
+  const connection = { id: 'memory', name: 'memory', kind: 'memory-mcp', baseUrl: 'https://memory.test/mcp', capabilities: ['memory', 'tools'], options: { authType: 'none' } };
+  const fetchImpl = async (_url, init) => { const request = JSON.parse(init.body); if (!request.id) return new Response('', { status: 202 });
+    if (request.method === 'initialize') return rpcResult(request, {}); return rpcResult(request, { tools: [{ name: 'search_memory', annotations: { readOnlyHint: true } }] }); };
+  const broker = new ToolBroker({ controlPlaneStore: { async get() { return { connections: [connection] }; } }, secretStore: { async read() { return ''; } }, fetchImpl });
+  const tools = await broker.listForBot({ tools: { enabled: true, connectionIds: ['memory'], allowedToolNames: [] } });
+  assert.deepEqual(tools.map((item) => item.name), ['search_memory']);
+});

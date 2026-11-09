@@ -1,23 +1,25 @@
 import { api, jsonBody } from './api.js';
 import { $, csv, id, options, toast } from './dom.js';
 import { bindImageEditor, fillImageEditor } from './image-editors.js';
-import { bindStickerEditor, refreshStickerPicker } from './sticker-editors.js';
+import { bindStickerEditor, fillStickerEditor, refreshStickerPicker } from './sticker-editors.js';
 import { bindBotSections, refreshBotSections } from './bot-sections.js';
-import { bindBotCards, refillBotEditor, botSaved } from './bot-cards.js';
+import { bindBotCards, refillBotEditor, botSaved, botDraftSaved } from './bot-cards.js';
 import { bindBotAvatar, resetAvatarFeedback } from './bot-avatar.js';
 import { bindWechatEditor, fillWechatEditor } from './wechat-editor.js';
 import { bindRuntimeUi, fillRuntimeMode, refreshRuntimeExplanation } from './runtime-diagnostics.js';
-import { bindProfileEditor, refreshProfileEditor } from './profile-editor.js';
+import { bindProfileEditor, fillProfileEditor, refreshProfileEditor } from './profile-editor.js';
 import { bindConnectionCatalog, fillConnectionCatalog } from './connection-catalog.js';
 import { bindConnectionTest, fillConnectionTest } from './connection-health.js';
 import { bindModelRefresh, loadModelPicker } from './model-picker.js';
+import { bindResourceBrowsers, refreshResourceBrowsers, resourceSaved, resourceRemoved } from './resource-browser.js';
+import { createResourceDefinitions } from './resource-definitions.js';
 
 const KINDS = [
   ['codex', 'Codex 订阅 / CLI'], ['claude', 'Claude Code 订阅 / CLI'], ['grok-build', 'Grok Build 订阅 / CLI'],
   ['openai-compatible', 'OpenAI 兼容 API / 中转站'], ['anthropic-compatible', 'Anthropic 兼容 API / 中转站'],
   ['vertex-ai', 'Google Vertex AI'], ['minimax', 'MiniMax TTS'], ['elevenlabs', 'ElevenLabs TTS'],
   ['gpt-sovits', '本地 GPT-SoVITS'], ['edge-tts', '免费 Edge TTS'], ['whisper-local', '本地 Whisper STT'],
-  ['memory-http', '外置记忆 HTTP'], ['memory-mcp', '外置记忆 MCP（运行时待接通）'],
+  ['memory-http', '外置记忆 HTTP'], ['memory-mcp', '外置记忆 MCP（记忆 + 工具）'],
   ['novelai', 'NovelAI 生图'], ['comfyui', '本地 / 远程 ComfyUI'],
   ['mcp-remote', '远程 MCP（HTTP）'], ['mcp-stdio', '本机 MCP（stdio）'],
 ];
@@ -31,18 +33,19 @@ export function bindEditors(app) {
   bindConnectionCatalog();
   bindConnectionTest();
   bindBotCards(app, fillBot); bindBotSections(); bindBotAvatar();
-  bindWechatEditor(app);
+  bindWechatEditor(app, () => saveBotDraft(app));
   bindRuntimeUi();
   $('#connection-kind').onchange = showConnectionFields;
   $('#bot-form').onsubmit = (event) => saveBot(event, app);
   $('#delete-bot').onclick = () => removeBot(app);
   $('#pair-button').onclick = () => pair(app);
   $('#bot-chat-connection').onchange = () => loadModels('', '');
-  $('#bot-model').onchange = updateBotEfforts;
+  $('#bot-model').onchange = () => updateBotEfforts();
   bindModelRefresh($('#bot-model-refresh'), loadModels);
   $('#bot-voice-probability').oninput = showProbability;
   $('#bot-sticker-probability').oninput = showStickerProbability;
   $('#bot-wake-mode').onchange = showWakeSchedule;
+  $('#bot-wake-quiet-enabled').onchange = showWakeSchedule;
   bindProfileEditor(app);
   $('#voice-picker').onchange = () => fillVoice(app, $('#voice-picker').value);
   $('#new-voice').onclick = () => fillVoice(app, '');
@@ -50,6 +53,8 @@ export function bindEditors(app) {
   $('#voice-form').onsubmit = (event) => saveVoice(event, app);
   bindImageEditor(app);
   bindStickerEditor(app);
+  bindResourceBrowsers(app, createResourceDefinitions({ kinds: KINDS, fillConnection, fillProfile: fillProfileEditor,
+    fillVoice, fillImage: fillImageEditor, fillSticker: fillStickerEditor }));
 }
 
 export function fillEditors(app) {
@@ -58,11 +63,9 @@ export function fillEditors(app) {
   options($('#voice-picker'), app.data.voiceProfiles.map(label), $('#voice-id').value, '新建声音');
   options($('#image-picker'), app.data.imageProfiles.map(label), $('#image-id').value, '新建生图路线');
   refreshStickerPicker(app);
-  fillConnection(app, $('#connection-picker').value || app.data.connections[0]?.id || '');
   refillBotEditor(app, fillBot);
   refreshProfileEditor(app);
-  fillVoice(app, $('#voice-picker').value || app.data.voiceProfiles[0]?.id || '');
-  fillImageEditor(app, $('#image-picker').value || app.data.imageProfiles[0]?.id || '');
+  refreshResourceBrowsers(app);
 }
 
 function fillConnection(app, itemId) {
@@ -90,6 +93,9 @@ function fillConnection(app, itemId) {
 
 function showConnectionFields() {
   $('#connection-api-format').hidden = $('#connection-kind').value !== 'openai-compatible';
+  $('#connection-url-help').textContent = $('#connection-kind').value === 'vertex-ai'
+    ? '填写完整的 Vertex 发布者地址，例如 https://LOCATION-aiplatform.googleapis.com/v1/projects/PROJECT_ID/locations/LOCATION/publishers/google；服务账号邮箱不是服务地址。'
+    : 'API / MCP 填服务地址；订阅 CLI 与本机命令可以留空。';
   refreshRuntimeExplanation();
 }
 
@@ -111,13 +117,13 @@ async function saveConnection(event, app) {
       accessMode: $('#connection-access-mode').value, transcriptionModel: $('#connection-stt-model').value,
       args: $('#connection-args').value.split(/\r?\n/u).map((item) => item.trim()).filter(Boolean), secretEnv: $('#connection-secret-env').value,
     } };
-  await api(existingId ? `/api/connections/${encodeURIComponent(existingId)}` : '/api/connections', { method: existingId ? 'PUT' : 'POST', body: jsonBody(body) });
-  toast('连接预设已保存'); await app.reload();
+  const saved = await api(existingId ? `/api/connections/${encodeURIComponent(existingId)}` : '/api/connections', { method: existingId ? 'PUT' : 'POST', body: jsonBody(body) });
+  resourceSaved('connections', saved.id); toast('连接预设已保存'); await app.reload();
 }
 
 async function removeConnection(app) {
   const itemId = $('#connection-id').value; if (!itemId || !confirm('删除这个连接预设？被 Bot 或声音引用时不会允许删除。')) return;
-  await api(`/api/connections/${encodeURIComponent(itemId)}`, { method: 'DELETE' }); toast('连接已删除'); await app.reload();
+  await api(`/api/connections/${encodeURIComponent(itemId)}`, { method: 'DELETE' }); resourceRemoved('connections'); toast('连接已删除'); await app.reload();
 }
 
 function fillBot(app, itemId) {
@@ -131,6 +137,10 @@ function fillBot(app, itemId) {
   $('#bot-enabled').checked = item?.enabled ?? false; $('#bot-group').checked = item?.telegram?.groupMode ?? false;
   options($('#bot-profile'), app.data.profiles.map(named), item?.profileId); options($('#bot-chat-connection'), chatConnections.map(named), item?.chat?.connectionId);
   options($('#bot-voice-profile'), app.data.voiceProfiles.map(named), item?.voice?.voiceProfileId || '', '不使用语音');
+  const usableVoices = app.data.voiceProfiles.filter((voice) => voice.primary?.connectionId);
+  $('#bot-voice-profile-help').textContent = usableVoices.length
+    ? '声音连接保存服务账号；声音预设只选择音色、模型和备用顺序。'
+    : '目前没有配置完成的声音预设。请先到“声音”页为预设选择首选连接、模型和音色 ID。';
   options($('#bot-memory'), memoryConnections.map(named), item?.memoryConnectionId || '', '不接外置记忆');
   options($('#bot-transcription'), sttConnections.map(named), item?.voice?.transcriptionConnectionId || '', '不接语音转写');
   options($('#bot-image-profile'), app.data.imageProfiles.map(named), item?.image?.imageProfileId || '', '不使用生图');
@@ -157,6 +167,7 @@ function fillBot(app, itemId) {
   $('#bot-wake-enabled').checked = item?.wake?.enabled ?? false; $('#bot-wake-chat').value = item?.wake?.targetChatId || suggestedWakeTarget;
   $('#bot-wake-mode').value = item?.wake?.scheduleMode || 'fixed'; $('#bot-wake-interval').value = item?.wake?.intervalMinutes ?? 60;
   $('#bot-wake-random-min').value = item?.wake?.randomMinMinutes ?? 45; $('#bot-wake-random-max').value = item?.wake?.randomMaxMinutes ?? 120;
+  $('#bot-wake-quiet-enabled').checked = item?.wake?.quietHoursEnabled ?? false;
   $('#bot-wake-limit').value = item?.wake?.dailyLimit ?? 3;
   $('#bot-wake-cooldown').value = item?.wake?.cooldownMinutes ?? 120; $('#bot-wake-start').value = item?.wake?.quietStart || '23:00';
   $('#bot-wake-end').value = item?.wake?.quietEnd || '08:00'; $('#bot-wake-prompt').value = item?.wake?.prompt || '';
@@ -169,8 +180,14 @@ function fillBot(app, itemId) {
 }
 
 async function saveBot(event, app) {
-  event.preventDefault(); const existingId = $('#bot-id').value;
-  const body = { name: $('#bot-name').value, avatar: $('#bot-avatar').value, enabled: $('#bot-enabled').checked, profileId: $('#bot-profile').value,
+  event.preventDefault(); const existingId = $('#bot-id').value; const body = botBody();
+  const saved = await api(existingId ? `/api/bots/${encodeURIComponent(existingId)}` : '/api/bots', { method: existingId ? 'PUT' : 'POST', body: jsonBody(body) });
+  botSaved(saved.id);
+  toast('Bot 设置已保存并实时应用'); await app.reload();
+}
+
+function botBody() {
+  return { name: $('#bot-name').value, avatar: $('#bot-avatar').value, enabled: $('#bot-enabled').checked, profileId: $('#bot-profile').value,
     channel: { type: $('#bot-channel').value },
     telegramToken: $('#bot-token').value, chat: { connectionId: $('#bot-chat-connection').value, model: $('#bot-model').value,
       effort: $('#bot-effort').value, fallbackConnectionIds: [] }, telegram: { allowedChatIds: csv($('#bot-allowed').value),
@@ -193,11 +210,16 @@ async function saveBot(event, app) {
       scheduleMode: $('#bot-wake-mode').value, intervalMinutes: Number($('#bot-wake-interval').value),
       randomMinMinutes: Number($('#bot-wake-random-min').value), randomMaxMinutes: Number($('#bot-wake-random-max').value),
       dailyLimit: Number($('#bot-wake-limit').value),
-      cooldownMinutes: Number($('#bot-wake-cooldown').value), quietStart: $('#bot-wake-start').value,
+      cooldownMinutes: Number($('#bot-wake-cooldown').value), quietHoursEnabled: $('#bot-wake-quiet-enabled').checked,
+      quietStart: $('#bot-wake-start').value,
       quietEnd: $('#bot-wake-end').value, prompt: $('#bot-wake-prompt').value }, memoryConnectionId: $('#bot-memory').value || null };
-  const saved = await api(existingId ? `/api/bots/${encodeURIComponent(existingId)}` : '/api/bots', { method: existingId ? 'PUT' : 'POST', body: jsonBody(body) });
-  botSaved(saved.id);
-  toast('Bot 设置已保存并实时应用'); await app.reload();
+}
+
+async function saveBotDraft(app) {
+  const existingId = $('#bot-id').value; const saved = await api(existingId ? `/api/bots/${encodeURIComponent(existingId)}` : '/api/bots', {
+    method: existingId ? 'PUT' : 'POST', body: jsonBody(botBody()),
+  });
+  botDraftSaved(saved.id); await app.reload(); return saved.id;
 }
 
 async function removeBot(app) {
@@ -231,6 +253,7 @@ function showStickerProbability() { $('#bot-sticker-value').textContent = `${$('
 function showWakeSchedule() {
   const mode = $('#bot-wake-mode').value || 'fixed';
   for (const node of document.querySelectorAll('[data-wake-mode]')) node.hidden = node.dataset.wakeMode !== mode;
+  $('#bot-wake-quiet-fields').hidden = !$('#bot-wake-quiet-enabled').checked;
   refreshBotSections();
 }
 
@@ -244,7 +267,7 @@ function fillVoice(app, itemId) {
 
 function routeCard(app, route = {}) {
   const node = document.createElement('article'); node.className = 'module-card';
-  node.innerHTML = '<div class="module-head"><select class="route-connection" aria-label="语音连接"></select><div class="model-picker-inline"><select class="route-model" aria-label="语音模型"></select><button type="button" class="quiet route-model-refresh">拉取</button></div><input class="route-voice" aria-label="音色 ID" placeholder="音色 ID"><button type="button" class="danger">移除</button></div><p class="hint route-model-status" role="status"></p><p class="route-expression" role="status"></p><div class="form-grid two"><input class="route-reference" aria-label="GPT-SoVITS 参考音频路径" placeholder="GPT-SoVITS 参考音频路径"><input class="route-reference-text" aria-label="参考音频文本" placeholder="参考音频文本"></div>';
+  node.innerHTML = '<div class="module-head"><select class="route-connection" aria-label="语音连接"></select><div class="model-picker-inline"><select class="route-model" aria-label="语音模型"></select><button type="button" class="quiet route-model-refresh">拉取</button></div><input class="route-voice" aria-label="音色 ID" placeholder="音色 ID（不是 API Key）"><button type="button" class="danger">移除</button></div><p class="hint route-model-status" role="status"></p><p class="route-expression" role="status"></p><div class="form-grid two route-reference-fields"><input class="route-reference" aria-label="GPT-SoVITS 参考音频路径" placeholder="GPT-SoVITS 参考音频路径"><input class="route-reference-text" aria-label="参考音频文本" placeholder="参考音频文本"></div>';
   const tts = app.data.connections.filter((entry) => entry.capabilities.includes('tts')); options($('.route-connection', node), tts.map(named), route.connectionId);
   $('.route-voice', node).value = route.voiceId || '';
   $('.route-reference', node).value = route.referenceAudio || ''; $('.route-reference-text', node).value = route.referenceText || '';
@@ -258,6 +281,7 @@ function routeCard(app, route = {}) {
       : connection?.kind === 'elevenlabs' ? '当前只负责音色与念字；推荐填写 eleven_v4，实时场景可用 eleven_v4_turbo。'
         : '当前线路负责音色与念字；不支持的语气标记会自动清理。';
     $('.route-expression', node).classList.toggle('supported', supported);
+    $('.route-reference-fields', node).hidden = connection?.kind !== 'gpt-sovits';
   };
   const loadVoiceModels = () => loadModelPicker({ select: $('.route-model', node), connectionId: $('.route-connection', node).value,
     purpose: 'tts', selected: $('.route-model', node).value || route.model || '', button: $('.route-model-refresh', node),
@@ -274,9 +298,10 @@ async function saveVoice(event, app) {
     model: $('.route-model', node).value, voiceId: $('.route-voice', node).value,
     referenceAudio: $('.route-reference', node).value, referenceText: $('.route-reference-text', node).value, language: 'zh' }));
   const body = { name: $('#voice-name').value, primary: routes[0] || null, fallbacks: routes.slice(1) };
-  await api(existingId ? `/api/voice-profiles/${encodeURIComponent(existingId)}` : '/api/voice-profiles', { method: existingId ? 'PUT' : 'POST', body: jsonBody(body) });
-  toast('声音预设已保存'); await app.reload();
+  const saved = await api(existingId ? `/api/voice-profiles/${encodeURIComponent(existingId)}` : '/api/voice-profiles', { method: existingId ? 'PUT' : 'POST', body: jsonBody(body) });
+  resourceSaved('voices', saved.id); toast('声音预设已保存'); await app.reload();
 }
+
 
 function named(item) { return { value: item.id, label: item.name }; }
 function multiOptions(select, items, selected) { const wanted = new Set(selected); select.replaceChildren(); for (const item of items) select.append(new Option(item.name, item.id, false, wanted.has(item.id))); }

@@ -1,5 +1,6 @@
 import { api, apiBlob, jsonBody } from './api.js';
 import { $, csv, id, options, toast } from './dom.js';
+import { resourceRemoved, resourceSaved } from './resource-browser.js';
 
 export function bindStickerEditor(app) {
   $('#sticker-picker').onchange = () => fillStickerEditor(app, $('#sticker-picker').value);
@@ -51,13 +52,13 @@ async function savePack(event, app) {
       meaning: $('.sticker-meaning', node).value, tags: csv($('.sticker-tags', node).value), enabled: $('.sticker-enabled', node).checked });
   }
   const body = { name: $('#sticker-pack-name').value, stickers };
-  await api(packId ? `/api/sticker-packs/${encodeURIComponent(packId)}` : '/api/sticker-packs', { method: packId ? 'PUT' : 'POST', body: jsonBody(body) });
-  toast('表情包已保存'); await app.reload();
+  const saved = await api(packId ? `/api/sticker-packs/${encodeURIComponent(packId)}` : '/api/sticker-packs', { method: packId ? 'PUT' : 'POST', body: jsonBody(body) });
+  resourceSaved('stickers', saved.id); toast('表情包已保存'); await app.reload();
 }
 
 async function removePack(app) {
   const packId = $('#sticker-pack-id').value; if (!packId || !confirm('删除这个表情包？被 Bot 引用时不会允许删除。')) return;
-  await api(`/api/sticker-packs/${encodeURIComponent(packId)}`, { method: 'DELETE' }); toast('表情包已删除'); await app.reload();
+  await api(`/api/sticker-packs/${encodeURIComponent(packId)}`, { method: 'DELETE' }); resourceRemoved('stickers'); toast('表情包已删除'); await app.reload();
 }
 function base64(file) { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onerror = reject; reader.onload = () => resolve(String(reader.result).split(',')[1]); reader.readAsDataURL(file); }); }
 
@@ -65,5 +66,4 @@ export function refreshStickerPicker(app) {
   const current = $('#sticker-pack-id').value;
   const selected = app.data.stickerPacks.some((item) => item.id === current) ? current : (app.data.stickerPacks[0]?.id || '');
   options($('#sticker-picker'), app.data.stickerPacks.map((item) => ({ value: item.id, label: item.name })), selected, '新建表情包');
-  fillStickerEditor(app, selected);
 }

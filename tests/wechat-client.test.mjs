@@ -20,6 +20,11 @@ test('wechat QR login returns only public QR data and normalizes confirmed accou
   assert.match(calls[0], /bot_type=3/u);
 });
 
+test('wechat QR login turns raw base64 into a browser image source', async () => {
+  const result = await requestWechatQr(async () => response({ qrcode: 'qr-code', qrcode_img_content: 'iVBORw0KGgo=' }));
+  assert.equal(result.image, 'data:image/png;base64,iVBORw0KGgo=');
+});
+
 test('wechat client sends the official iLink text envelope without exposing the token in errors', async () => {
   let request;
   const client = new WechatClient({ token: 'super-secret', fetchImpl: async (url, options) => {

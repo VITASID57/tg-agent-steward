@@ -148,6 +148,7 @@ export function normalizeBot(input) {
       intervalMinutes: rangedInt(wake.intervalMinutes, 60, 5, 10_080),
       randomMinMinutes: Math.min(wakeRandomA, wakeRandomB),
       randomMaxMinutes: Math.max(wakeRandomA, wakeRandomB),
+      quietHoursEnabled: wake.quietHoursEnabled !== false,
       quietStart: time(wake.quietStart, '23:00'), quietEnd: time(wake.quietEnd, '08:00'),
       dailyLimit: rangedInt(wake.dailyLimit, 3, 1, 50), cooldownMinutes: rangedInt(wake.cooldownMinutes, 120, 5, 10_080),
       prompt: text(wake.prompt, '看看最近的对话和记忆，只有确实有想说的话时才主动联系。没有就只回复 [[SILENT]]。', 4000),
@@ -168,7 +169,7 @@ function normalizeImageRoute(value) {
   if (!value || !value.connectionId) return null;
   return {
     connectionId: requiredId(value.connectionId), model: text(value.model, '', 160),
-    size: text(value.size, '1024x1024', 40), options: object(value.options),
+    size: text(value.size, '', 40), options: object(value.options),
   };
 }
 function normalizeTest(value) { return value && typeof value === 'object' ? {
