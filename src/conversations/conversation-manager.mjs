@@ -60,7 +60,7 @@ export class ConversationManager {
   }
 
   async diagnostics(botId = 'bot-default') {
-    const runtime = await this.#runtime(botId);
+    const runtime = await this.#runtime(botId, { allowIncomplete: true });
     const chats = (await this.stateFile.read()).chats ?? {};
     const chat = Object.entries(chats).filter(([key]) => key.startsWith(`${botId}:`))
       .map(([, value]) => value).sort((a, b) => String(b.lastMessageAt).localeCompare(String(a.lastMessageAt)))[0] ?? null;
@@ -72,7 +72,7 @@ export class ConversationManager {
       memory: runtime.bot?.memoryConnectionId ? '（外置记忆按本轮话题读取后放在这里）' : '',
       stickerInstructions: runtime.bot?.stickers?.enabled ? '（本轮相关表情候选放在这里）' : '' });
     return {
-      configured: { engine: runtime.connection?.kind ?? runtime.settings.engine,
+      configured: { engine: runtime.connection?.kind ?? '未配置连接',
         model: runtime.settings.model, effort: runtime.settings.effort, runtimeMode: runtime.settings.runtimeMode },
       prompt: { stable: instructions, dynamicExample, stableTokens: estimateTokens(instructions),
         dynamicTokens: estimateTokens(dynamicExample) },
@@ -184,7 +184,7 @@ export class ConversationManager {
     return this.#setChat(chatId, update(current));
   }
 
-  async #runtime(botId) {
+  async #runtime(botId, { allowIncomplete = false } = {}) {
     if (!this.controlPlaneStore) {
       const [settings, personaState] = await Promise.all([this.settingsStore.get(), this.personaStore.get()]);
       return { settings, persona: personaState.current, profile: null, connection: null, state: null };
@@ -193,12 +193,13 @@ export class ConversationManager {
     const bot = state.bots.find((item) => item.id === botId);
     if (!bot) throw Object.assign(new Error('找不到这个 Bot'), { statusCode: 404 });
     const connection = state.connections.find((item) => item.id === bot.chat.connectionId);
-    const profile = state.profiles.find((item) => item.id === bot.profileId);
-    if (!connection || !profile) throw new Error('Bot 的连接或人物档案不完整');
-    const options = connection.options ?? {};
+    const savedProfile = state.profiles.find((item) => item.id === bot.profileId);
+    if ((!connection || !savedProfile) && !allowIncomplete) throw new Error('Bot 的连接或人物档案不完整');
+    const profile = savedProfile ?? { id: 'profile-unconfigured', revision: 0, blocks: [] };
+    const options = connection?.options ?? {};
     const settings = {
-      engine: connection.kind, model: bot.chat.model, effort: bot.chat.effort,
-      connectionId: connection.id, runtimeMode: options.runtimeMode === 'agent' ? 'agent' : 'chat',
+      engine: connection?.kind ?? 'unconfigured', model: bot.chat.model, effort: bot.chat.effort,
+      connectionId: connection?.id ?? null, runtimeMode: options.runtimeMode === 'agent' ? 'agent' : 'chat',
       workingDirectory: options.workingDirectory ?? '',
       codex: { sandbox: options.sandbox ?? 'read-only', approvalPolicy: options.approvalPolicy ?? 'never' },
       claude: { tools: options.tools ?? [], allowedTools: options.allowedTools ?? [], disallowedTools: options.disallowedTools ?? [], mcpConfigPath: options.mcpConfigPath ?? '' },
@@ -230,6 +231,7 @@ function parseToolRequest(text) { const match = String(text).trim().match(/^<too
 function serializeToolResult(value) { const text = typeof value === 'string' ? value : JSON.stringify(value); return text.length > 12_000 ? `${text.slice(0, 12_000)}…` : text; }
 function estimateTokens(value) { return Math.ceil(String(value || '').length / 3); }
 function nativeLayer(engine, mode) {
+  if (engine === 'unconfigured') return '尚未配置模型连接；保存并分配连接后，这里会显示实际运行环境。';
   if (mode === 'agent') return '完整 Agent：会继承部署环境中该 CLI 可发现的项目规则、设置、Skills 与原生工具。';
   if (engine === 'codex') return '纯聊天：使用独立 Codex Home 与空工作目录，不继承部署环境的 AGENTS.md。';
   if (engine === 'claude') return '纯聊天：替换 Claude Code 默认系统提示，并关闭 CLAUDE.md、自动记忆与用户设置来源。';

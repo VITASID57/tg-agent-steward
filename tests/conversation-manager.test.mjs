@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ConversationManager } from '../src/conversations/conversation-manager.mjs';
+import { defaultControlPlane } from '../src/control/defaults.mjs';
 
 class MemoryFile {
   constructor(value) { this.value = structuredClone(value); }
@@ -39,4 +40,22 @@ test('engine switch summarizes old session and starts a new one', async () => {
   assert.equal(codex.calls.at(-1).sessionId, 'codex-new');
   assert.doesNotMatch(claude.calls.at(-1).instructions, /旧会话摘要/);
   assert.match(claude.calls.at(-1).prompt, /【上一会话交接】\n旧会话摘要/);
+});
+
+test('diagnostics remain available before a bot has a model connection', async () => {
+  const state = defaultControlPlane();
+  const manager = new ConversationManager({
+    settingsStore: { get: async () => ({}) },
+    personaStore: { get: async () => ({ current: { id: 'unused', text: '' } }) },
+    controlPlaneStore: { get: async () => structuredClone(state) },
+    stateFile: new MemoryFile({ chats: {} }),
+    engines: { get() { throw new Error('diagnostics should not create an engine'); } },
+  });
+
+  const result = await manager.diagnostics('bot-default');
+
+  assert.equal(result.configured.engine, '未配置连接');
+  assert.equal(result.configured.connectionId, undefined);
+  assert.match(result.prompt.dynamicExample, /本轮收到的消息/);
+  assert.deepEqual(result.tools, []);
 });
