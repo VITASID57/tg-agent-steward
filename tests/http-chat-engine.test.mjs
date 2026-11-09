@@ -50,7 +50,7 @@ test('Vertex model catalog uses the official regional Model Garden list endpoint
   } });
   const result = await engine.capabilities({ purpose: 'chat' });
   assert.equal(result.source, 'live'); assert.equal(result.models[0].id, 'gemini-2.5-flash');
-  assert.equal(requested, 'https://us-central1-aiplatform.googleapis.com/v1/publishers/google/models?listAllVersions=false');
+  assert.equal(requested, 'https://us-central1-aiplatform.googleapis.com/v1beta1/publishers/google/models?listAllVersions=false');
 });
 
 test('ElevenLabs voice catalog is pulled and filtered for text to speech', async () => {

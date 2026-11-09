@@ -11,18 +11,18 @@ export class HttpChatEngine {
   }
 
   async capabilities({ purpose = 'chat' } = {}) {
-    let models = []; let source = 'saved';
+    let models = []; let source = 'saved'; let liveError = '';
     try {
       models = await this.#liveModels(purpose);
       if (models.length) source = 'live';
-    } catch { /* A saved or built-in catalog still keeps the selector usable. */ }
+    } catch (error) { liveError = error.message; }
     if (!models.length) models = this.connection.cachedModels.map((id) => ({ id, name: id }));
     if (!models.length) { models = builtInModels(this.connection.kind, purpose); source = 'built-in'; }
     const efforts = this.connection.kind === 'vertex-ai'
       ? ['minimal', 'low', 'medium', 'high'] : ['low', 'medium', 'high'];
     return { available: true, models: models.map((item) => ({ id: item.id, name: item.name || item.id,
       efforts: item.efforts || (purpose === 'chat' ? efforts : []) })), efforts: purpose === 'chat' ? efforts : [],
-      supportsManualModel: false, source };
+      supportsManualModel: false, source, liveError };
   }
 
   async complete({ sessionId, prompt, settings, instructions }) {
@@ -199,7 +199,7 @@ function vertexCatalogUrl(base) {
   const match = url.pathname.match(/^\/v1\/projects\/[^/]+\/locations\/([^/]+)\/publishers\/google(?:\/models(?:\/[^/:]+(?::[^/]+)?)?)?$/u);
   const requestedLocation = match?.[1] || 'us-central1';
   const location = requestedLocation === 'global' ? 'us-central1' : requestedLocation;
-  return `${url.protocol}//${location}-aiplatform.googleapis.com/v1/publishers/google/models?listAllVersions=false`;
+  return `${url.protocol}//${location}-aiplatform.googleapis.com/v1beta1/publishers/google/models?listAllVersions=false`;
 }
 function vertexHeaders(secret, options = {}) { return (options.authStyle || options.authType || 'api-key') === 'bearer' ? { Authorization: `Bearer ${secret}` } : { 'x-goog-api-key': secret }; }
 function responseText(data) {
