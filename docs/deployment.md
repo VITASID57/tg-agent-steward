@@ -53,7 +53,52 @@ BotFather token in the Bot page.
 API-key routes are the simplest phone-only option. Codex, Claude Code and Grok
 Build subscription routes require their official CLI and interactive account
 login on the same runtime machine, which ordinary phone-oriented hosting may not
-support. The container intentionally does not bundle those account sessions.
+support. Account sessions are never baked into the image.
+
+### Optional Codex and Grok Build subscription image
+
+The Dockerfile can install the official Codex and Grok Build CLIs at build time:
+
+```bash
+docker build \
+  --build-arg INSTALL_SUBSCRIPTION_CLIS=1 \
+  -t lumenkeep:subscriptions .
+```
+
+Keep each CLI login cache outside the replaceable container. Alongside the
+normal `/data` volume, mount two private directories owned by the container user
+(UID/GID 1000 by default):
+
+```bash
+mkdir -p /srv/lumenkeep/data /srv/lumenkeep/codex-home /srv/lumenkeep/grok-home
+chown -R 1000:1000 /srv/lumenkeep
+
+docker run -d --name lumenkeep --restart unless-stopped \
+  -p 127.0.0.1:8788:8788 \
+  -v /srv/lumenkeep/data:/data \
+  -v /srv/lumenkeep/codex-home:/home/node/.codex \
+  -v /srv/lumenkeep/grok-home:/home/node/.grok \
+  -e TG_STEWARD_ADMIN_PASSWORD='<your management password>' \
+  -e TG_STEWARD_ALLOWED_ORIGINS='https://<your control-page domain>' \
+  lumenkeep:subscriptions
+```
+
+On a remote or headless server, authorize each account with its provider's
+device-code flow. The commands print a temporary URL and one-time code; open the
+URL on a phone or computer and approve it with the account that owns the
+subscription:
+
+```bash
+docker exec -it lumenkeep codex login --device-auth
+docker exec -it lumenkeep grok login --device-auth
+```
+
+Then create one **Codex subscription / CLI** and one **Grok Build subscription /
+CLI** preset in **连接预设**, use **拉取模型**, and run the connection self-check.
+The mounted login directories contain password-equivalent tokens: never commit,
+publish, back up to a public location or paste their contents into the control
+page. If a provider revokes or expires a session, run that provider's login
+command again; existing Bot and persona settings remain intact.
 
 The included Dockerfile is provider-neutral. A future one-click template can
 wrap it for a particular host, but that template must also create persistent

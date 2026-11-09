@@ -100,9 +100,11 @@ Token 也可继续由 `TELEGRAM_BOT_TOKEN` 提供给默认 Bot。若未设置管
 | `TG_STEWARD_DATA_DIR` | 私有配置、密钥与会话目录 |
 | `CODEX_COMMAND` / `CLAUDE_COMMAND` / `GROK_COMMAND` | CLI 可执行文件名或绝对路径 |
 
-订阅型连接由用户在同一台机器上使用官方 CLI 自行登录；API 型连接使用用户自己
-的 Key。项目不共享模型账号，也不读取网页登录 cookie。模型出现在目录里只代表
-可选择，真实可用性仍以一次成功请求为准。
+订阅型连接由用户在同一台机器上使用官方 CLI 自行登录；Docker 可通过
+`INSTALL_SUBSCRIPTION_CLIS=1` 选择性安装 Codex 与 Grok Build CLI，并把登录目录
+单独挂载持久化，详见 [部署说明](./docs/deployment.md#optional-codex-and-grok-build-subscription-image)。
+API 型连接使用用户自己的 Key。项目不共享模型账号，也不读取网页登录 cookie。
+模型出现在目录里只代表可选择，真实可用性仍以一次成功请求为准。
 
 ## API 与扩展
 
