@@ -11,6 +11,13 @@ function Test-Steward {
 }
 function Get-StewardHealth { return Invoke-RestMethod "$address/healthz" -TimeoutSec 2 }
 if (-not (Test-Steward)) {
+  $qrModule = Join-Path $projectRoot 'node_modules\qrcode\lib\index.js'
+  if (-not (Test-Path -LiteralPath $qrModule)) {
+    $npmCommand = (Get-Command npm.cmd -ErrorAction Stop).Source
+    Push-Location $projectRoot
+    try { & $npmCommand ci --omit=dev --ignore-scripts }
+    finally { Pop-Location }
+  }
   $nodeCommand = (Get-Command node -ErrorAction Stop).Source
   New-Item -ItemType Directory -Path $stewardData -Force | Out-Null
   $serverPath = Join-Path $projectRoot 'src/server.mjs'

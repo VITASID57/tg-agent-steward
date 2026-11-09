@@ -72,6 +72,7 @@ Windows 用户可以直接双击项目根目录的 **打开TG管家.cmd**。它�
 
 ```powershell
 $env:TG_STEWARD_ADMIN_PASSWORD = "自己设置的长管理密码"
+npm ci
 node src/server.mjs
 ```
 
