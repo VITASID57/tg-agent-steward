@@ -1,0 +1,10 @@
+.git
+.github
+.playwright-cli
+coverage
+data
+node_modules
+*.log
+docs
+scripts
+tests

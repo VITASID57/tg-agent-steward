@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark"><meta name="theme-color" content="#060d22"><title>栖光庭 · Lumenkeep</title><link rel="icon" href="/assets/gentian-mark.svg" type="image/svg+xml"><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/gentian-theme.css">
+</head>
+<body>
+  <div class="ambient" aria-hidden="true"></div>
+  <main class="shell">
+    <header class="masthead"><a class="brand" href="#overview" aria-label="栖光庭首页"><img src="/assets/gentian-mark.svg" width="38" height="38" alt=""><div><h1>栖光庭</h1><p class="eyebrow">LUMENKEEP</p></div></a>
+      <div class="header-actions"><button type="button" id="forget-login" class="quiet" aria-label="忘记本机登录" title="忘记本机登录" hidden>退出</button><button type="button" id="motion-toggle" class="quiet" aria-pressed="true">动效 · 开</button><div class="status-pill" id="connection-pill"><span></span><b>未连接</b></div></div></header>
+    <div class="studio-layout">
+      <aside class="botanical-panel" aria-label="栖光庭透光胶片主题">
+        <div class="film-art" aria-hidden="true"><picture><source media="(max-width: 850px)" srcset="/assets/gentian-hero-wide-v2.webp"><img class="gentian-image" src="/assets/gentian-film.png" alt="" width="1024" height="1536" fetchpriority="high"></picture><div class="film-light"></div><div class="film-grain"></div></div>
+        <div class="specimen-title"><span class="specimen-kicker">栖光庭</span><p>Lumenkeep<span>.</span></p><span class="specimen-position">一处管理 Bot 连接、模型与能力的控制台。</span></div>
+      </aside>
+      <div class="control-room">
+    <section class="login-panel" id="login-panel" aria-labelledby="login-title"><p class="eyebrow">YOUR LUMENKEEP</p><h2 id="login-title">欢迎回来<span class="pink-stop">。</span></h2><p class="login-lede">进入你的 Bot 控制台。</p><label for="admin-token">管理密码</label>
+      <div class="password-field"><input id="admin-token" type="password" autocomplete="current-password" placeholder="输入这份栖光庭的管理密码" aria-describedby="login-help login-error"><button type="button" id="token-visibility" aria-label="显示管理密码" aria-pressed="false">显示</button></div>
+      <p id="login-error" role="alert" hidden></p><button id="connect-button" class="primary connect-action">进入管家 <span aria-hidden="true">↗</span></button>
+      <details class="login-help" id="login-help"><summary>管理密码是什么，在哪里设置？</summary><p>它只保护这一份栖光庭。部署时可用 <code>TG_STEWARD_ADMIN_PASSWORD</code> 自己设置；每位部署者都有自己的，不来自 GitHub，也不是 Telegram Bot Token。</p><p>未设置时会自动生成并保存在部署数据目录的 <code>.admin-token</code>。只有服务仅供部署主机自己访问时，才能设置 <code>TG_STEWARD_AUTH_MODE=none</code> 免密码进入；可从网络访问的服务不允许关闭密码。</p><p>Telegram Bot Token 和模型 Key 请进入后台后分别填写。Windows 本地运行也可以双击项目中的 <code>打开TG管家.cmd</code>，自动启动并进入。</p></details>
+      <div class="login-footnote"><span></span>登录信息保存在这台设备的浏览器中，可随时选择“忘记本机登录”</div></section>
+    <div id="app" hidden>
+      <nav class="tabs" aria-label="管家设置"><button class="active" data-tab="overview">总览</button><button data-tab="connections">连接预设</button><button data-tab="bots">Bot</button><button data-tab="profiles">人物</button><button data-tab="voices">声音</button><button data-tab="images">生图</button><button data-tab="stickers">表情包</button></nav>
+      <section class="tab-page active" data-page="overview">
+        <div class="metric-grid"><article class="metric"><span>连接预设</span><strong id="count-connections">0</strong><small>凭据集中保存</small></article><article class="metric"><span>消息 Bot</span><strong id="count-bots">0</strong><small id="running-bots">0 个运行中</small></article><article class="metric metric-modules"><span>内容模块</span><div id="count-profiles" class="metric-module-grid"><small><b data-module-count="profiles">0</b><i>人物</i></small><small><b data-module-count="voices">0</b><i>声音</i></small><small><b data-module-count="images">0</b><i>生图</i></small><small><b data-module-count="stickers">0</b><i>表情</i></small></div></article></div>
+        <article class="panel"><div class="panel-heading"><div><p class="eyebrow">RUNTIME</p><h2>Bot 状态</h2></div><button id="refresh-button" class="quiet">刷新</button></div><div id="bot-status-list" class="card-list"></div></article>
+        <article class="panel shortcuts"><div class="panel-heading"><div><p class="eyebrow">CONNECT THE PATHS</p><h2>从这里开始连接</h2></div></div><button type="button" data-goto="connections"><span class="step-number">01</span><span><b>保存连接预设</b><small>集中管理订阅、API 和工具连接</small></span><span aria-hidden="true">↗</span></button><button type="button" data-goto="bots"><span class="step-number">02</span><span><b>接入消息 Bot</b><small>分配模型、声音、记忆与能力</small></span><span aria-hidden="true">↗</span></button><button type="button" data-goto="profiles"><span class="step-number">03</span><span><b>组合人物规则</b><small>按场景启用需要的人物与规则模块</small></span><span aria-hidden="true">↗</span></button></article>
+      </section>
+      <section class="tab-page" data-page="connections">
+        <form class="panel" id="connection-form"><div class="panel-heading"><div><p class="eyebrow">CONNECTION VAULT</p><h2>连接预设</h2></div><button type="button" id="new-connection">新建</button></div><p>站点、登录与 Key 只填一次。Bot 只引用连接，不复制凭据。</p>
+          <label for="connection-picker">编辑已有连接</label><select id="connection-picker"></select><input id="connection-id" type="hidden">
+          <div class="form-grid two"><div><label for="connection-name">名称</label><input id="connection-name" required></div><div><label for="connection-kind">类型</label><select id="connection-kind"></select></div></div>
+          <div id="connection-runtime-box" class="runtime-mode-box">
+            <label for="connection-runtime-mode">运行环境</label><select id="connection-runtime-mode"><option value="chat">纯聊天（推荐）</option><option value="agent">完整 Agent</option></select>
+            <div class="runtime-mode-note" id="connection-runtime-note" role="status"></div>
+            <details class="instruction-layers"><summary>这两个模式到底隔开了什么？</summary><ol><li><b>模型底子</b>：模型能力与平台底线由提供方决定，任何模式下均无法由管家关闭或修改。</li><li><b>原生环境</b>：AGENTS.md、CLAUDE.md、Skills、插件和编程工具；纯聊天会尽量隔离，完整 Agent 会继承。</li><li><b>管家注入</b>：只有你启用的人物模块、功能协议、外置记忆和 MCP；由本页与 Bot 页控制。</li></ol></details>
+          </div>
+          <label for="connection-url">服务地址</label><input id="connection-url" placeholder="CLI 连接可以留空">
+          <div class="form-grid two"><div><label for="connection-secret">密钥</label><input id="connection-secret" type="password" autocomplete="new-password" placeholder="留空保留原密钥"></div><div><label for="connection-model-catalog">模型目录</label><div class="model-picker-inline"><select id="connection-model-catalog" aria-describedby="connection-model-status"><option>保存连接后可拉取</option></select><button type="button" id="connection-model-refresh" class="quiet">拉取模型</button></div><input id="connection-models" type="hidden"><p class="hint" id="connection-model-status">先保存地址与凭据，再从提供方读取可用模型。</p></div></div>
+          <div class="form-grid two"><div id="connection-workdir-box"><label for="connection-workdir">Agent 工作目录</label><input id="connection-workdir"><p class="hint">只在“完整 Agent”中使用；纯聊天会自动使用一个没有项目规则的专用空目录。</p></div><div id="connection-api-format"><label for="connection-api-style">接口格式</label><select id="connection-api-style" aria-describedby="api-format-help"><option value="chat-completions">Chat Completions · /chat/completions</option><option value="responses">Responses · /responses</option></select><p class="hint" id="api-format-help">按站点接入说明选择：写着 /chat/completions 就选第一项，写着 /responses 就选第二项。这决定请求格式，不改变人物语气。不确定时可先保留默认值，再核对站点说明。</p></div></div>
+          <div class="form-grid two"><div><label for="connection-group-id">MiniMax Group ID</label><input id="connection-group-id"></div><div><label for="connection-command">部署主机命令</label><input id="connection-command" placeholder="例如 edge-tts"></div></div>
+          <details class="advanced"><summary>CLI 工具与 MCP（高级）</summary>
+            <div class="form-grid two"><div><label for="connection-tools">Claude 原生工具（完整 Agent）</label><input id="connection-tools" placeholder="例如 Read, WebFetch"></div><div><label for="connection-mcp">Claude 原生 MCP（高级）</label><input id="connection-mcp" placeholder="服务器上的绝对路径"></div></div>
+            <div class="form-grid two"><div><label for="connection-allowed-tools">允许的工具</label><input id="connection-allowed-tools" placeholder="逗号分隔"></div><div><label for="connection-disallowed-tools">禁用的工具</label><input id="connection-disallowed-tools" placeholder="逗号分隔"></div></div>
+            <div class="form-grid two"><div><label for="connection-sandbox">Codex 沙盒</label><select id="connection-sandbox"><option value="read-only">只读</option><option value="workspace-write">工作区可写</option></select></div><div><label for="connection-approval">Codex 审批策略</label><select id="connection-approval"><option value="never">不弹审批</option><option value="on-request">按需审批</option><option value="untrusted">不受信任操作审批</option></select></div></div>
+            <div class="form-grid two"><div><label for="connection-memory-context">记忆读取路径</label><input id="connection-memory-context" placeholder="默认 /v1/context"></div><div><label for="connection-memory-write">记忆写入路径</label><input id="connection-memory-write" placeholder="默认 /v1/turns"></div></div>
+            <div class="form-grid two"><div><label for="connection-memory-context-tool">记忆 MCP 读取工具名</label><input id="connection-memory-context-tool" placeholder="默认 get_briefing"></div><div><label for="connection-memory-write-tool">记忆 MCP 写入工具名</label><input id="connection-memory-write-tool" placeholder="默认 store_memory"></div></div>
+            <div class="form-grid two"><div><label for="connection-memory-idle">重新唤醒间隔（小时）</label><input id="connection-memory-idle" type="number" min="1" value="6"></div><label class="switch"><input id="connection-memory-write-enabled" type="checkbox"><span></span><b>允许自动写回</b><small>默认关闭，确认接口语义后再开</small></label></div>
+            <h3>通用 MCP 与语音识别</h3>
+            <div class="form-grid two"><div><label for="connection-auth-type">密钥放置方式</label><select id="connection-auth-type"><option value="bearer">Bearer Header</option><option value="api-key">Google x-goog-api-key</option><option value="header">自定义 Header</option><option value="query">URL 查询参数</option><option value="none">不使用密钥</option></select></div><div><label for="connection-auth-name">Header / 参数名</label><input id="connection-auth-name" placeholder="例如 key 或 X-API-Key"></div></div>
+            <div class="form-grid two"><div><label for="connection-access-mode">MCP 默认权限</label><select id="connection-access-mode"><option value="approval">写操作需明确开启</option><option value="read-only">整条连接只读</option></select></div><div><label for="connection-stt-model">语音识别模型</label><select id="connection-stt-model"><option value="">由连接自动选择</option></select></div></div>
+            <div class="form-grid two"><div><label for="connection-args">部署主机 MCP 参数（每行一个）</label><textarea id="connection-args" rows="4" placeholder="例如 --transport&#10;stdio"></textarea></div><div><label for="connection-secret-env">部署主机密钥环境变量名</label><input id="connection-secret-env" placeholder="例如 SERVICE_API_KEY"></div></div>
+            <p class="hint">公开版默认最小权限。纯聊天推荐在 Bot 页选择单独保存的通用 MCP 连接，这样 Codex、CC、Grok 和 API 模型都走同一份可见白名单；上面的 CLI 原生工具主要留给完整 Agent。</p>
+          </details>
+          <div id="connection-test-result" class="connection-test-result" role="status" aria-live="polite"></div>
+          <div class="save-row"><span id="connection-secret-state">尚未保存密钥</span><div class="button-row"><button type="button" id="test-connection" class="quiet">连接自检</button><button type="button" id="delete-connection" class="danger">删除</button><button class="primary">保存连接</button></div></div>
+        </form>
+      </section>
+      <section class="tab-page" data-page="bots">
+        <form class="panel" id="bot-form">
+          <div id="bot-list-view"><div class="panel-heading"><div><p class="eyebrow">BOT DIRECTORY</p><h2 id="bot-list-title" tabindex="-1">消息渠道 Bot</h2></div><button type="button" id="new-bot">新建 Bot</button></div>
+            <p>每张卡片代表一个独立的消息入口。先选择 Bot 查看运行状态，再进入编辑。</p>
+            <div id="bot-cards" class="bot-cards" aria-label="选择要查看的 Bot"></div>
+            <p id="bot-selection-hint" class="hint">选择一张卡片查看状态；也可以新建 Bot。</p>
+          </div>
+          <section id="bot-detail" class="bot-detail" hidden aria-labelledby="bot-detail-name">
+            <div class="detail-nav"><button type="button" id="bot-detail-back" class="quiet">← 全部 Bot</button><button type="button" id="bot-detail-edit" class="primary">编辑 Bot</button></div>
+            <div class="bot-detail-hero"><div id="bot-detail-avatar" class="bot-detail-avatar" aria-label="Bot 头像"></div><div class="bot-detail-title"><p class="eyebrow" id="bot-detail-channel">BOT</p><h2 id="bot-detail-name" tabindex="-1">Bot</h2><span id="bot-detail-status" class="badge bot-detail-status">读取中</span></div></div>
+            <div class="bot-detail-facts" aria-label="当前连接摘要"><div><small>连接预设</small><strong id="bot-detail-connection">—</strong></div><div><small>模型</small><strong id="bot-detail-model">—</strong></div><div><small>人物档案</small><strong id="bot-detail-profile">—</strong></div><div><small>运行方式</small><strong id="bot-detail-mode">—</strong></div></div>
+            <section class="detail-section" aria-labelledby="bot-feature-title"><div class="section-title"><div><p class="eyebrow">CAPABILITIES</p><h3 id="bot-feature-title">已配置的功能</h3></div><small>这里显示保存后正在生效的配置，不包含编辑中的草稿。</small></div><div id="bot-detail-features" class="feature-grid"></div></section>
+            <section class="detail-section" aria-labelledby="bot-runtime-title"><div class="injection-heading"><div><p class="eyebrow">RUNTIME</p><h3 id="bot-runtime-title">实际运行信息</h3><small>查看连接状态、自动唤醒、运行时间线、注入内容、工具与用量；不会展示账号密钥或聊天正文。</small></div><button type="button" id="refresh-bot-diagnostics" class="quiet">刷新运行信息</button></div><div id="bot-diagnostics" class="diagnostic-grid"><p class="hint">正在读取运行信息…</p></div></section>
+          </section>
+          <fieldset id="bot-editor" hidden disabled><legend id="bot-editor-title">Bot 设置</legend><input id="bot-id" type="hidden">
+          <div class="editor-topline"><p class="hint" id="bot-unsaved-state">修改只在保存后生效</p><button type="button" id="cancel-bot-edit" class="quiet">取消编辑</button></div>
+          <div class="section-toolbar"><span>展开需要的功能，修改后统一保存。</span><button type="button" id="bot-collapse-all" class="quiet">全部收起</button><button type="button" id="bot-expand-all" class="quiet">全部展开</button></div>
+          <details class="bot-section" data-bot-section="account" open><summary><span>消息入口与启停</span><small data-section-status="account"></small></summary><div class="bot-section-body">
+          <div class="bot-avatar-editor"><div id="bot-avatar-preview" class="bot-avatar-preview" aria-label="头像预览"></div><div><label for="bot-avatar-file">卡片图像</label><input id="bot-avatar-file" type="file" accept="image/png,image/jpeg,image/webp"><input id="bot-avatar" type="hidden"><button type="button" id="bot-avatar-remove" class="quiet">恢复默认花图</button><p class="hint">未上传时使用栖光庭的透光龙胆花。支持 PNG、JPEG、WebP，最大 10 MB，居中裁成竖版 2:3，仅用于管家展示。</p><p id="bot-avatar-feedback" role="status"></p></div></div>
+          <div class="form-grid two"><div><label for="bot-name">名称</label><input id="bot-name" required></div><div><label for="bot-channel">消息入口</label><select id="bot-channel"><option value="telegram">Telegram</option><option value="wechat-clawbot">微信 ClawBot / iLink</option></select></div></div>
+          <div class="channel-panel" data-channel-panel="telegram"><label for="bot-token">Telegram Bot Token</label><input id="bot-token" type="password" autocomplete="new-password" placeholder="留空保留原 Token"></div>
+          <div class="channel-panel wechat-login" data-channel-panel="wechat-clawbot" hidden>
+            <p class="hint">这是官方微信 ClawBot / iLink 扫码通道，与 OpenClaw 微信插件使用同一类入口；不需要额外安装整套 OpenClaw。先保存这张 Bot 卡，再扫码连接微信。</p>
+            <div class="button-row"><button type="button" id="wechat-login-start">获取微信二维码</button><button type="button" id="wechat-disconnect" class="danger">解除微信连接</button></div>
+            <div id="wechat-login-box" class="wechat-qr" hidden><img id="wechat-qr-image" alt="微信 ClawBot 登录二维码"><div><strong id="wechat-login-state">等待扫码</strong><p class="hint">请用手机微信扫码并确认。二维码有效期约 5 分钟，本页会自动查看确认状态。</p><div id="wechat-verify-box" class="inline-input" hidden><input id="wechat-verify-code" inputmode="numeric" placeholder="手机显示的数字"><button type="button" id="wechat-verify-submit">确认数字</button></div></div></div>
+          </div>
+          <div class="switch-grid"><label class="switch"><input id="bot-enabled" type="checkbox"><span></span><b>启用 Bot</b><small>保存后真实启停</small></label><label class="switch" data-telegram-only><input id="bot-group" type="checkbox"><span></span><b>群聊模式</b><small>只回应明确提及</small></label></div>
+          </div></details>
+          <details class="bot-section" data-bot-section="chat" open><summary><span>人物与聊天模型</span><small data-section-status="chat"></small></summary><div class="bot-section-body">
+          <div class="form-grid two"><div><label for="bot-profile">使用的人物档案</label><select id="bot-profile"></select></div><div><label for="bot-chat-connection">连接预设</label><select id="bot-chat-connection"></select></div></div>
+          <p class="hint">人物页编辑“他是谁、怎么说话”；这里选择“这个 Bot 用哪份人物”。多个 Bot 可共用一份，修改共享人物会影响所有引用它的 Bot；想独立修改，请新建另一份人物。</p>
+          <div class="form-grid two"><div><label for="bot-model">模型</label><div class="model-picker-inline"><select id="bot-model" aria-describedby="bot-model-status"><option value="">选择连接后拉取</option></select><button type="button" id="bot-model-refresh" class="quiet">拉取模型</button></div><p class="hint" id="bot-model-status">选择连接后会自动读取模型目录。</p></div><div><label for="bot-effort">思考强度</label><select id="bot-effort"><option value="">后端默认</option></select></div></div>
+          </div></details>
+          <details class="bot-section" data-bot-section="voice"><summary><span>语音与听写</span><small data-section-status="voice"></small></summary><div class="bot-section-body">
+          <div class="switch-grid"><label class="switch"><input id="bot-voice-enabled" type="checkbox"><span></span><b>允许语音回复</b><small>Telegram 发语音；微信发音频文件</small></label><label class="switch"><input id="bot-voice-text" type="checkbox"><span></span><b>同时发送文字</b><small>关闭后语音成功时只发音频</small></label></div>
+          <div class="form-grid two"><div><label for="bot-voice-profile">声音预设</label><select id="bot-voice-profile"></select></div><div><label for="bot-transcription">收到语音时的转写连接（Telegram）</label><select id="bot-transcription"></select></div></div>
+          <p class="hint">微信语音输入使用微信随消息提供的转写文字；微信没附转写时会如实提示，不会把听不懂的内容交给模型猜。</p>
+          <label for="bot-voice-probability">语音回复概率 · <output id="bot-voice-value">0%</output></label><input id="bot-voice-probability" type="range" min="0" max="100" step="1"><p class="hint">0% 永不自动发语音，100% 每轮都尝试；保存后下一轮实时生效。</p>
+          </div></details>
+          <details class="bot-section" data-bot-section="memory"><summary><span>外置记忆</span><small data-section-status="memory"></small></summary><div class="bot-section-body">
+          <label for="bot-memory">记忆连接</label><select id="bot-memory"></select><p class="hint">选择已保存的记忆库连接。共用人物不代表自动共用记忆，记忆归属由所选记忆服务的配置决定。</p>
+          </div></details>
+          <details class="bot-section" data-bot-section="image"><summary><span>生图</span><small data-section-status="image"></small></summary><div class="bot-section-body">
+          <div class="switch-grid"><label class="switch"><input id="bot-image-enabled" type="checkbox"><span></span><b>允许 /draw 生图</b><small>按生图预设依次回退</small></label></div>
+          <label for="bot-image-profile">生图路线</label><select id="bot-image-profile"></select>
+          </div></details>
+          <details class="bot-section" data-bot-section="stickers"><summary><span>表情包</span><small data-section-status="stickers"></small></summary><div class="bot-section-body">
+          <div class="switch-grid"><label class="switch"><input id="bot-stickers-enabled" type="checkbox"><span></span><b>允许表情回复</b><small>只从分配的表情包里选择</small></label></div>
+          <div class="form-grid two"><div><label for="bot-sticker-packs">表情包（可多选）</label><select id="bot-sticker-packs" multiple size="4"></select></div><div><label for="bot-sticker-probability">表情回复概率 · <output id="bot-sticker-value">30%</output></label><input id="bot-sticker-probability" type="range" min="0" max="100" step="1"></div></div>
+          </div></details>
+          <details class="bot-section" data-bot-section="tools"><summary><span>外部工具 / MCP</span><small data-section-status="tools"></small></summary><div class="bot-section-body">
+          <div class="switch-grid"><label class="switch"><input id="bot-tools-enabled" type="checkbox"><span></span><b>启用工具</b><small>仅注入已选连接</small></label><label class="switch"><input id="bot-tool-writes" type="checkbox"><span></span><b>允许写操作</b><small>下单、预约等高风险能力</small></label></div>
+          <div class="form-grid two"><div><label for="bot-tool-connections">工具连接（可多选）</label><select id="bot-tool-connections" multiple size="4"></select></div><div><label for="bot-tool-names">工具白名单</label><textarea id="bot-tool-names" rows="4" placeholder="逗号分隔；留空表示连接内全部工具"></textarea></div></div>
+          <p class="hint">默认只能运行标记为只读的工具。付款、下单、发消息等写操作即使服务支持，也要单独打开开关。</p>
+          </div></details>
+          <details class="bot-section" data-bot-section="wake"><summary><span>自动唤醒</span><small data-section-status="wake"></small></summary><div class="bot-section-body">
+          <div class="switch-grid"><label class="switch"><input id="bot-wake-enabled" type="checkbox"><span></span><b>启用主动唤醒</b><small>默认关闭；允许模型选择沉默</small></label></div>
+          <div class="form-grid two"><div><label id="bot-wake-target-label" for="bot-wake-chat">目标 Chat ID</label><input id="bot-wake-chat"></div><div><label for="bot-wake-mode">唤醒节奏</label><select id="bot-wake-mode"><option value="random">随机区间</option><option value="fixed">固定间隔</option></select></div></div>
+          <div data-wake-mode="fixed"><label for="bot-wake-interval">固定间隔（分钟）</label><input id="bot-wake-interval" type="number" min="5"></div>
+          <div class="form-grid two" data-wake-mode="random"><div><label for="bot-wake-random-min">随机最短间隔（分钟）</label><input id="bot-wake-random-min" type="number" min="5"></div><div><label for="bot-wake-random-max">随机最长间隔（分钟）</label><input id="bot-wake-random-max" type="number" min="5"></div></div>
+          <p class="hint" data-wake-mode="random">随机区间会在每次检查后重新抽取下一次时间；安静时段内命中会重新抽签，不会每天固定在同一分钟冒头。</p>
+          <div class="form-grid two"><div><label for="bot-wake-limit">每天最多主动消息</label><input id="bot-wake-limit" type="number" min="1"></div><div><label for="bot-wake-cooldown">成功发送后冷却（分钟）</label><input id="bot-wake-cooldown" type="number" min="5"></div></div>
+          <div class="form-grid two"><div><label for="bot-wake-start">安静时段开始</label><input id="bot-wake-start" type="time"></div><div><label for="bot-wake-end">安静时段结束</label><input id="bot-wake-end" type="time"></div></div>
+          <label for="bot-wake-prompt">唤醒任务</label><textarea id="bot-wake-prompt" rows="4"></textarea><p class="hint">微信需要目标用户先发过消息以取得会话上下文；上下文失效时本次记为失败，不占每日成功额度。</p>
+          </div></details>
+          <details class="bot-section" data-bot-section="channel"><summary><span id="bot-channel-section-title">配对与 Telegram 行为</span><small data-section-status="channel"></small></summary><div class="bot-section-body">
+          <div data-channel-detail="telegram"><p>Telegram 支持私聊与群聊、外置语音转写、原生语音气泡、分句和短消息合并。下面每项都是发送行为开关，不会偷偷写进人物提示词。</p>
+          <div class="switch-grid"><label class="switch"><input id="bot-telegram-typing" type="checkbox"><span></span><b>显示正在输入</b><small>回复生成期间显示</small></label><label class="switch"><input id="bot-telegram-split" type="checkbox"><span></span><b>按段分句发送</b><small>空行或 [SPLIT] 处分开发</small></label><label class="switch"><input id="bot-telegram-long-split" type="checkbox"><span></span><b>超长自动拆分</b><small>避免超过平台长度</small></label><label class="switch"><input id="bot-telegram-merge" type="checkbox"><span></span><b>合并短时间连发</b><small>等一等再一起回复</small></label></div>
+          <label for="bot-allowed">已允许的 Chat ID</label><input id="bot-allowed" placeholder="逗号分隔">
+          <div class="form-grid two"><div><label for="bot-merge-delay">连发等待（毫秒）</label><input id="bot-merge-delay" type="number" min="0" max="10000"></div><div><label>配对码</label><div class="inline-input"><button type="button" id="pair-button">生成</button><strong id="pair-code"></strong></div></div></div></div>
+          <div data-channel-detail="wechat-clawbot" hidden><p>微信入口使用扫码账号授权，支持私聊文字、微信自带语音转写、分句、输入中提示、生图、表情图片和音频文件回复；人物、记忆与 MCP 工具照常使用。</p>
+          <div class="switch-grid"><label class="switch"><input id="bot-wechat-typing" type="checkbox"><span></span><b>显示正在输入</b><small>回复生成期间显示</small></label><label class="switch"><input id="bot-wechat-transcription" type="checkbox"><span></span><b>接收微信语音转写</b><small>使用微信随消息提供的文字</small></label><label class="switch"><input id="bot-wechat-split" type="checkbox"><span></span><b>按段分句发送</b><small>空行或 [SPLIT] 处分开发</small></label><label class="switch"><input id="bot-wechat-long-split" type="checkbox"><span></span><b>超长自动拆分</b><small>避免长消息静默丢失</small></label></div>
+          <label for="bot-wechat-allowed">已允许的微信 User ID</label><input id="bot-wechat-allowed" placeholder="配对后自动加入；也可逗号分隔填写"><div class="form-grid two"><div><label>微信配对码</label><div class="inline-input"><button type="button" id="wechat-pair-button">生成</button><strong id="wechat-pair-code"></strong></div></div><p class="hint">在微信里发送 <code>/pair 配对码</code>。原生语音气泡与群聊暂不开放；自动唤醒使用最近会话上下文并按实际投递结果记账。</p></div></div>
+          <details class="channel-capability-table"><summary>Telegram 与微信现在分别能做什么？</summary><div class="table-scroll"><table><thead><tr><th>能力</th><th>Telegram</th><th>微信 ClawBot</th></tr></thead><tbody><tr><td>文字、图片、表情图、音频文件</td><td>支持</td><td>支持</td></tr><tr><td>输入中、按段分句、超长拆分</td><td>可单独开关</td><td>可单独开关</td></tr><tr><td>人物、外置记忆、MCP、自动唤醒</td><td>支持</td><td>支持；主动发送依赖最近会话上下文</td></tr><tr><td>语音输入</td><td>通过所选 STT 转写</td><td>使用微信随消息提供的转写</td></tr><tr><td>平台专属</td><td>群聊提及、短消息合并、原生语音气泡</td><td>扫码登录</td></tr><tr><td>当前未开放</td><td>—</td><td>群聊、原生语音气泡</td></tr></tbody></table></div></details>
+          </div></details>
+          <div class="save-row bot-save-row"><span id="bot-runtime-state">尚未连接</span><div class="button-row"><button type="button" id="delete-bot" class="danger">删除</button><button class="primary">保存 Bot</button></div></div>
+          </fieldset>
+        </form>
+      </section>
+      <section class="tab-page" data-page="profiles">
+        <form class="panel" id="profile-form"><div class="panel-heading"><div><p class="eyebrow">PROMPT MODULES</p><h2>人物档案</h2></div><button type="button" id="new-profile">新建</button></div>
+          <p>这里管理管家自己注入的人设与规则。管家没有隐藏的默认人格；只有已启用、正文非空且适用于当前渠道的模块才会注入。它不会改写部署环境原有的 AGENTS.md、CLAUDE.md 或项目规则。</p><p class="profile-usage" id="profile-usage" aria-live="polite"></p>
+          <label for="profile-picker">编辑人物</label><select id="profile-picker"></select><input id="profile-id" type="hidden"><div class="form-grid two"><div><label for="profile-name">名称</label><input id="profile-name" required></div><div><label for="profile-source">来源</label><input id="profile-source" value="local"></div></div>
+          <div class="panel-heading subheading"><div><h3>规则模块</h3><p class="hint">可从建议模板起步，也可完全自己写。模板只在你点击时加入，加入后仍可修改、关闭或删除。</p></div><button type="button" id="add-block">新增空白模块</button></div><div class="template-strip" aria-label="建议模板"><button type="button" class="quiet" data-profile-template="general">+ 通用聊天建议</button><button type="button" class="quiet" data-profile-template="telegram">+ Telegram 建议</button><button type="button" class="quiet" data-profile-template="wechat">+ 微信建议</button><button type="button" class="quiet" data-profile-template="tools">+ 工具与事实建议</button></div><div id="profile-blocks" class="module-list"></div><div class="save-row"><span>关闭或正文为空的模块会保留，但不会注入模型。</span><button class="primary">保存人物</button></div>
+        </form>
+      </section>
+      <section class="tab-page" data-page="voices">
+        <form class="panel" id="voice-form"><div class="panel-heading"><div><p class="eyebrow">VOICE ROUTES</p><h2>声音预设</h2></div><button type="button" id="new-voice">新建</button></div>
+          <div class="expression-note"><strong>语气表现会自动工作</strong><p>Bot 开启语音回复，并选择支持语气的首选线路后，模型会按当下语境少量使用耳语、轻声、叹气、笑声、紧张与停顿等表现。语气标记只交给念字服务，不显示在文字消息，也不写进记忆。</p><p>当前支持：ElevenLabs v4 / v4 Turbo / v3 与 Vertex / Gemini TTS；普通 Telegram 语音推荐高质量的 <code>eleven_v4</code>。其他线路仍可使用音色与自然标点，但会自动清理语气标记。</p></div>
+          <label for="voice-picker">编辑声音</label><select id="voice-picker"></select><input id="voice-id" type="hidden"><label for="voice-name">声音名称</label><input id="voice-name" required>
+          <div class="panel-heading subheading"><h3>首选与备用线路</h3><button type="button" id="add-voice-route">增加备用</button></div><div id="voice-routes" class="module-list"></div><div class="save-row"><span>按顺序尝试；上一条失败才走下一条。</span><button class="primary">保存声音</button></div>
+        </form>
+      </section>
+      <section class="tab-page" data-page="images">
+        <form class="panel" id="image-form"><div class="panel-heading"><div><p class="eyebrow">IMAGE ROUTES</p><h2>生图路线</h2></div><button type="button" id="new-image">新建</button></div>
+          <p>和声音一样按顺序尝试。Codex / Grok 订阅、本地 ComfyUI、Vertex、NovelAI 与中转 API 都只需在连接页保存一次。</p>
+          <label for="image-picker">编辑生图路线</label><select id="image-picker"></select><input id="image-id" type="hidden"><label for="image-name">路线名称</label><input id="image-name" required>
+          <div class="panel-heading subheading"><h3>首选与备用线路</h3><button type="button" id="add-image-route">增加备用</button></div><div id="image-routes" class="module-list"></div><div class="save-row"><span>发送 <code>/draw 画面描述</code> 即可调用。</span><button class="primary">保存生图路线</button></div>
+        </form>
+      </section>
+      <section class="tab-page" data-page="stickers">
+        <form class="panel" id="sticker-form"><div class="panel-heading"><div><p class="eyebrow">STICKER PACKS</p><h2>表情包</h2></div><button type="button" id="new-sticker-pack">新建</button></div>
+          <p>图片保存在服务器私有数据区。模型每轮只看到少量相关候选，发送前还会再次核对，不能编造不存在的表情。</p>
+          <label for="sticker-picker">编辑表情包</label><select id="sticker-picker"></select><input id="sticker-pack-id" type="hidden"><label for="sticker-pack-name">表情包名称</label><input id="sticker-pack-name" required>
+          <div class="panel-heading subheading"><h3>表情图片</h3><button type="button" id="add-sticker">增加表情</button></div><div id="sticker-items" class="module-list"></div>
+          <div class="save-row"><span>支持 PNG / JPEG，单张不超过 2 MiB。</span><div class="button-row"><button type="button" id="delete-sticker-pack" class="danger">删除</button><button class="primary">保存表情包</button></div></div>
+        </form>
+      </section>
+    </div></div></div><footer class="studio-footer"><span>LUMENKEEP</span><span>连接 · 能力 · 状态</span><span>BOTANICAL EDITION</span></footer><div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </main><script type="module" src="/app.js"></script>
+</body></html>
