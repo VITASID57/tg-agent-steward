@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import QRCode from 'qrcode';
 import { fileItem, imageItem, uploadWechatMedia } from './wechat-media.mjs';
 
 const DEFAULT_BASE_URL = 'https://ilinkai.weixin.qq.com';
@@ -106,7 +107,7 @@ export async function requestWechatQr(fetchImpl = fetch) {
   });
   const payload = parseJson(await response.text());
   if (!response.ok || !payload.qrcode || !payload.qrcode_img_content) throw new Error('暂时没有拿到微信登录二维码');
-  return { code: payload.qrcode, image: qrImageSource(payload.qrcode_img_content) };
+  return { code: payload.qrcode, image: await qrImageSource(payload.qrcode_img_content) };
 }
 
 export async function pollWechatQr(code, fetchImpl = fetch, options = {}) {
@@ -151,8 +152,13 @@ function parseJson(value) {
   catch { throw new Error('微信通道返回了无法识别的数据'); }
 }
 
-function qrImageSource(value) {
+async function qrImageSource(value) {
   const image = String(value || '').trim();
-  if (/^(?:data:image\/|https?:\/\/)/iu.test(image)) return image;
+  if (/^data:image\//iu.test(image)) return image;
+  if (/^https?:\/\//iu.test(image)) {
+    const path = new URL(image).pathname;
+    if (/\.(?:avif|gif|jpe?g|png|svg|webp)$/iu.test(path)) return image;
+    return QRCode.toDataURL(image, { errorCorrectionLevel: 'M', margin: 2, width: 320 });
+  }
   return `data:image/png;base64,${image.replace(/\s+/gu, '')}`;
 }

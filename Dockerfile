@@ -25,7 +25,8 @@ RUN if [ "$INSTALL_SUBSCRIPTION_CLIS" = "1" ]; then \
       rm -rf /var/lib/apt/lists/* /root/.npm; \
     fi
 
-COPY package.json LICENSE ./
+COPY package.json package-lock.json LICENSE ./
+RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 COPY src ./src
 
 RUN mkdir -p /data && chown -R node:node /app /data

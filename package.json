@@ -14,5 +14,8 @@
     "check": "node --check src/server.mjs && node --check src/web/app.js && node --check src/web/editors.js && node --check src/web/connection-health.js && node --check src/web/bot-cards.js && node --check src/web/bot-detail.js && node --check src/web/profile-editor.js && node --check src/web/runtime-diagnostics.js && node --check src/web/runtime-visibility.js && node --check src/web/wechat-editor.js && node --check src/web/sticker-editors.js && node --test \"tests/**/*.test.mjs\""
   },
   "license": "PolyForm-Noncommercial-1.0.0",
-  "author": "TG Agent Steward contributors"
+  "author": "TG Agent Steward contributors",
+  "dependencies": {
+    "qrcode": "^1.5.4"
+  }
 }

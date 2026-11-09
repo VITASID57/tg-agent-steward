@@ -25,6 +25,14 @@ test('wechat QR login turns raw base64 into a browser image source', async () =>
   assert.equal(result.image, 'data:image/png;base64,iVBORw0KGgo=');
 });
 
+test('wechat QR login renders the official QR landing page as a scannable image', async () => {
+  const result = await requestWechatQr(async () => response({
+    qrcode: 'qr-code', qrcode_img_content: 'https://example.test/q/opaque-login-code',
+  }));
+  assert.match(result.image, /^data:image\/png;base64,/u);
+  assert.ok(result.image.length > 500);
+});
+
 test('wechat client sends the official iLink text envelope without exposing the token in errors', async () => {
   let request;
   const client = new WechatClient({ token: 'super-secret', fetchImpl: async (url, options) => {
