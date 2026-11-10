@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { ControlPlaneStore } from '../src/control/control-plane-store.mjs';
+import { JsonFile } from '../src/storage/json-file.mjs';
 
 function memoryFile(initial = {}) {
   let value = structuredClone(initial);
@@ -95,4 +99,55 @@ test('sticker packs are reusable and cannot be deleted while a bot references th
   const state = await store.get(); await store.upsertBot({ ...state.bots[0], stickers: { enabled: true, packIds: [created.id], replyProbability: 42 } });
   await assert.rejects(store.removeStickerPack(created.id), /仍被 Bot 引用/);
   assert.equal((await store.get()).bots[0].stickers.replyProbability, 42);
+});
+
+test('whole preset deletion protects references, then removes released presets', async () => {
+  const store = new ControlPlaneStore(memoryFile());
+  const { bots: [initial], profiles: [original] } = await store.get();
+  const profile = await store.upsertProfile({ name: '替用人物' });
+  const connection = await store.upsertConnection({ name: '备用连接', kind: 'vertex-ai' });
+  const voice = await store.upsertVoiceProfile({ name: '备用声音', fallbacks: [{ connectionId: connection.id }] });
+  const image = await store.upsertImageProfile({ name: '备用生图', primary: { connectionId: connection.id } });
+  const pack = await store.upsertStickerPack({ name: '备用表情' });
+  await store.upsertBot({ ...initial, profileId: profile.id, name: '测试 Bot',
+    voice: { ...initial.voice, voiceProfileId: voice.id }, image: { ...initial.image, imageProfileId: image.id },
+    stickers: { ...initial.stickers, packIds: [pack.id] } });
+  const deletions = [[store.removeProfile, profile], [store.removeVoiceProfile, voice],
+    [store.removeImageProfile, image], [store.removeStickerPack, pack]];
+  for (const [remove, item] of deletions) {
+    await assert.rejects(remove.call(store, item.id), { statusCode: 409, message: /测试 Bot/u });
+  }
+  await assert.rejects(store.removeConnection(connection.id), { statusCode: 409, message: /备用声音、备用生图/u });
+  await store.upsertBot({ ...initial, profileId: original.id });
+  for (const [remove, item] of deletions) await remove.call(store, item.id);
+  await store.removeConnection(connection.id);
+  const saved = await store.get();
+  assert.deepEqual(saved.profiles.map((entry) => entry.id), [original.id]);
+  assert.deepEqual([saved.connections, saved.voiceProfiles, saved.imageProfiles, saved.stickerPacks], [[], [], [], []]);
+  await assert.rejects(store.upsertBot({ ...initial, profileId: profile.id }), { statusCode: 409 });
+  assert.equal((await store.get()).bots[0].profileId, original.id);
+});
+
+test('common modules persist separately from profile copies, including when all blocks are removed', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'steward-profile-library-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const path = join(dir, 'control.json');
+  const store = new ControlPlaneStore(new JsonFile(path, {}));
+  const { profiles: [profile] } = await store.get();
+  const [template, emptied] = await Promise.all([
+    store.addProfileBlockTemplate({ title: '写作口吻', body: '保留自己的口吻', enabled: false, surface: 'telegram', scope: 'private' }),
+    store.upsertProfile({ ...profile, blocks: [] }),
+  ]);
+  const restarted = new ControlPlaneStore(new JsonFile(path, {}));
+  const state = await restarted.get();
+  assert.deepEqual(state.profiles[0], emptied);
+  assert.deepEqual(state.profiles[0].blocks, []);
+  assert.deepEqual(state.profileBlockTemplates, [template]);
+  assert.deepEqual({ ...template, id: undefined }, { id: undefined, title: '写作口吻', body: '保留自己的口吻',
+    enabled: false, surface: 'telegram', scope: 'private' });
+  const other = await restarted.upsertProfile({ name: '另一个人物', blocks: [{ ...template, id: 'copy' }] });
+  await restarted.removeProfileBlockTemplate(template.id);
+  assert.deepEqual((await restarted.get()).profileBlockTemplates, []);
+  assert.deepEqual((await restarted.get()).profiles.find((entry) => entry.id === other.id).blocks, other.blocks);
+  await assert.rejects(restarted.addProfileBlockTemplate({ title: '空正文', body: '  ' }), { statusCode: 400 });
 });

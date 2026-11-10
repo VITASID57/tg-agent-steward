@@ -34,6 +34,7 @@ export function defaultControlPlane(legacy = {}) {
     voiceProfiles: [],
     imageProfiles: [],
     stickerPacks: [],
+    profileBlockTemplates: [],
     bots: [{
       id: 'bot-default', name: '我的 Telegram Bot', enabled: legacy.telegram?.enabled ?? true,
       channel: { type: 'telegram' },

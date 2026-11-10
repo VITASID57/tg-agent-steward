@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { normalizeBot, normalizeConnection, normalizeControlPlane, normalizeImageProfile, normalizeProfile, normalizeStickerPack, normalizeVoiceProfile } from './validate.mjs';
+import { normalizeBot, normalizeConnection, normalizeControlPlane, normalizeImageProfile, normalizeProfile, normalizeProfileBlock, normalizeStickerPack, normalizeVoiceProfile } from './validate.mjs';
 
 export class ControlPlaneStore {
   constructor(file, legacyStore = null) {
@@ -10,49 +10,37 @@ export class ControlPlaneStore {
   async get() {
     const legacy = await this.legacyStore?.get().catch(() => ({})) ?? {};
     const raw = await this.file.read();
-    const state = normalizeControlPlane(raw, legacy);
-    if (raw?.schemaVersion !== 2) await this.file.write(state);
-    return state;
+    if (raw?.schemaVersion === 2) return normalizeControlPlane(raw, legacy);
+    return this.file.update((current) => normalizeControlPlane(current, legacy));
   }
 
   async upsertConnection(input) {
-    const state = await this.get(); const now = new Date().toISOString();
-    const previous = state.connections.find((item) => item.id === input.id);
-    const id = input.id || `connection-${randomUUID()}`;
-    const next = normalizeConnection({ ...input, id, createdAt: previous?.createdAt || now, updatedAt: now });
-    return this.#write({ ...state, connections: replace(state.connections, next) }, next);
+    return this.#upsert('connections', 'connection', input, normalizeConnection);
   }
 
   async upsertProfile(input) {
-    const state = await this.get(); const now = new Date().toISOString();
-    const previous = state.profiles.find((item) => item.id === input.id);
-    const next = normalizeProfile({ ...input, id: input.id || `profile-${randomUUID()}`,
-      createdAt: previous?.createdAt || now, updatedAt: now, revision: (previous?.revision ?? 0) + 1 });
-    return this.#write({ ...state, profiles: replace(state.profiles, next) }, next);
+    return this.#upsert('profiles', 'profile', input, (value, previous) =>
+      normalizeProfile({ ...value, revision: (previous?.revision ?? 0) + 1 }));
   }
 
   async upsertVoiceProfile(input) {
-    const state = await this.get(); const now = new Date().toISOString();
-    const previous = state.voiceProfiles.find((item) => item.id === input.id);
-    const next = normalizeVoiceProfile({ ...input, id: input.id || `voice-${randomUUID()}`,
-      createdAt: previous?.createdAt || now, updatedAt: now });
-    return this.#write({ ...state, voiceProfiles: replace(state.voiceProfiles, next) }, next);
+    return this.#upsert('voiceProfiles', 'voice', input, normalizeVoiceProfile);
   }
 
   async upsertImageProfile(input) {
-    const state = await this.get(); const now = new Date().toISOString();
-    const previous = state.imageProfiles.find((item) => item.id === input.id);
-    const next = normalizeImageProfile({ ...input, id: input.id || `image-${randomUUID()}`,
-      createdAt: previous?.createdAt || now, updatedAt: now });
-    return this.#write({ ...state, imageProfiles: replace(state.imageProfiles, next) }, next);
+    return this.#upsert('imageProfiles', 'image', input, normalizeImageProfile);
   }
 
   async upsertStickerPack(input) {
-    const state = await this.get(); const now = new Date().toISOString();
-    const previous = state.stickerPacks.find((item) => item.id === input.id);
-    const next = normalizeStickerPack({ ...input, id: input.id || `stickers-${randomUUID()}`,
-      createdAt: previous?.createdAt || now, updatedAt: now });
-    return this.#write({ ...state, stickerPacks: replace(state.stickerPacks, next) }, next);
+    return this.#upsert('stickerPacks', 'stickers', input, normalizeStickerPack);
+  }
+
+  async addProfileBlockTemplate(input) {
+    const template = normalizeProfileBlock({ ...input, id: `template-${randomUUID()}` });
+    if (typeof input?.title !== 'string' || !input.title.trim() || !template.body.trim()) {
+      throw Object.assign(new Error('请先填写模块标题和正文'), { statusCode: 400 });
+    }
+    return this.#upsert('profileBlockTemplates', 'template', template, (value) => normalizeProfileBlock(value));
   }
 
   async upsertBot(input) {
@@ -64,6 +52,10 @@ export class ControlPlaneStore {
       const previous = state.bots.find((item) => item.id === input.id);
       next = normalizeBot({ ...input, avatar: input.avatar ?? previous?.avatar, id: input.id || `bot-${randomUUID()}`,
         createdAt: previous?.createdAt || now, updatedAt: now });
+      if (!state.profiles.some((item) => item.id === next.profileId)
+        || (next.chat.connectionId && !state.connections.some((item) => item.id === next.chat.connectionId))) {
+        throw Object.assign(new Error('人物或聊天连接已不存在，请重新选择'), { statusCode: 409 });
+      }
       return normalizeControlPlane({ ...state, bots: replace(state.bots, next) });
     });
     return next;
@@ -85,16 +77,24 @@ export class ControlPlaneStore {
   }
 
   async removeConnection(id) {
-    const state = await this.get();
-    const references = state.bots.filter((bot) => [bot.chat.connectionId, ...bot.chat.fallbackConnectionIds,
-      bot.voice.transcriptionConnectionId, bot.memoryConnectionId, ...bot.tools.connectionIds].includes(id))
-      .map((bot) => bot.name);
-    const voiceReferences = state.voiceProfiles.filter((profile) => [profile.primary, ...profile.fallbacks]
-      .some((route) => route?.connectionId === id)).map((profile) => profile.name);
-    const imageReferences = state.imageProfiles.filter((profile) => [profile.primary, ...profile.fallbacks]
-      .some((route) => route?.connectionId === id)).map((profile) => profile.name);
-    if (references.length || voiceReferences.length || imageReferences.length) throw Object.assign(new Error(`连接仍被引用：${[...references, ...voiceReferences, ...imageReferences].join('、')}`), { statusCode: 409 });
-    await this.#write({ ...state, connections: state.connections.filter((item) => item.id !== id) });
+    return this.#remove('connections', id, '连接', (state) => [
+      ...state.bots.filter((bot) => [bot.chat.connectionId, ...bot.chat.fallbackConnectionIds,
+        bot.voice.transcriptionConnectionId, bot.memoryConnectionId, ...bot.tools.connectionIds].includes(id)),
+      ...[...state.voiceProfiles, ...state.imageProfiles].filter((profile) =>
+        [profile.primary, ...profile.fallbacks].some((route) => route?.connectionId === id)),
+    ]);
+  }
+
+  async removeProfile(id) {
+    return this.#remove('profiles', id, '人物', (state) => state.bots.filter((bot) => bot.profileId === id));
+  }
+
+  async removeVoiceProfile(id) {
+    return this.#remove('voiceProfiles', id, '声音预设', (state) => state.bots.filter((bot) => bot.voice.voiceProfileId === id));
+  }
+
+  async removeImageProfile(id) {
+    return this.#remove('imageProfiles', id, '生图路线', (state) => state.bots.filter((bot) => bot.image.imageProfileId === id));
   }
 
   async removeBot(id) {
@@ -106,20 +106,40 @@ export class ControlPlaneStore {
   }
 
   async removeStickerPack(id) {
-    const state = await this.get(); const users = state.bots.filter((bot) => bot.stickers.packIds.includes(id)).map((bot) => bot.name);
-    if (users.length) throw Object.assign(new Error(`表情包仍被 Bot 引用：${users.join('、')}`), { statusCode: 409 });
-    await this.#write({ ...state, stickerPacks: state.stickerPacks.filter((item) => item.id !== id) });
+    return this.#remove('stickerPacks', id, '表情包', (state) => state.bots.filter((bot) => bot.stickers.packIds.includes(id)));
   }
 
-  async #upsert(key, value) {
-    const state = await this.get();
-    return this.#write({ ...state, [key]: replace(state[key], value) }, value);
+  async removeProfileBlockTemplate(id) {
+    return this.#remove('profileBlockTemplates', id);
   }
 
-  async #write(state, result) {
-    const normalized = normalizeControlPlane(state);
-    await this.file.write(normalized);
-    return result ?? normalized;
+  async #upsert(key, prefix, input, normalize) {
+    const legacy = await this.legacyStore?.get().catch(() => ({})) ?? {};
+    const now = new Date().toISOString();
+    let saved;
+    await this.file.update((raw) => {
+      const state = normalizeControlPlane(raw, legacy);
+      const previous = state[key].find((item) => item.id === input.id);
+      saved = normalize({ ...input, id: input.id || `${prefix}-${randomUUID()}`,
+        createdAt: previous?.createdAt || now, updatedAt: now }, previous);
+      if (!saved) throw Object.assign(new Error('无法保存这个预设'), { statusCode: 400 });
+      return normalizeControlPlane({ ...state, [key]: replace(state[key], saved) });
+    });
+    return saved;
+  }
+
+  async #remove(key, id, label = '', references = () => []) {
+    const legacy = await this.legacyStore?.get().catch(() => ({})) ?? {};
+    await this.file.update((raw) => {
+      const state = normalizeControlPlane(raw, legacy);
+      const users = references(state);
+      if (users.length) {
+        const names = [...new Set(users.map((item) => item.name))].join('、');
+        const target = key === 'connections' ? '被引用' : '被 Bot 引用';
+        throw Object.assign(new Error(`${label}仍${target}（${names}）。请先更换或取消对应设置，再删除。`), { statusCode: 409 });
+      }
+      return { ...state, [key]: state[key].filter((item) => item.id !== id) };
+    });
   }
 }
 

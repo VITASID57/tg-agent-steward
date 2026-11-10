@@ -108,7 +108,9 @@ input[type="range"] { padding:0; accent-color:var(--accent); }
 .template-strip { display:flex; flex-wrap:wrap; gap:8px; margin:0 0 12px; }
 .module-card { padding:14px; border:1px solid var(--line); border-radius:16px; background:color-mix(in srgb,var(--paper-solid) 76%,transparent); }
 .module-head { display:grid; grid-template-columns:minmax(150px,1fr) auto minmax(130px,auto) auto; gap:10px; align-items:center; margin-bottom:10px; }
-.prompt-module-head { grid-template-columns:minmax(150px,1fr) auto minmax(135px,auto) minmax(135px,auto) auto; }
+.prompt-module-head { grid-template-columns:minmax(0,1fr) auto minmax(0,1fr) minmax(0,1fr); }
+.profile-template-library { margin-bottom:12px; }
+.profile-template-library .template-strip { margin:10px 0 0; }
 .module-head label { display:flex; align-items:center; gap:7px; margin:0; white-space:nowrap; }
 .module-head label input { width:auto; }
 .module-card .form-grid { margin:10px 0 0; }

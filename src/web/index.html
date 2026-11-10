@@ -53,7 +53,7 @@
             <p class="hint">栖光庭接入的 MCP 可在 Bot 页逐个开关。</p>
           </details>
           <div id="connection-test-result" class="connection-test-result" role="status" aria-live="polite"></div>
-          <div class="save-row"><span id="connection-secret-state">尚未保存密钥</span><div class="button-row"><button type="button" id="test-connection" class="quiet">连接自检</button><button type="button" id="delete-connection" class="danger">删除</button><button class="primary">保存连接</button></div></div>
+          <div class="save-row"><span id="connection-secret-state">尚未保存密钥</span><div class="button-row"><button type="button" id="test-connection" class="quiet">连接自检</button><button class="primary">保存连接</button></div></div>
         </form>
       </section>
       <section class="tab-page" data-page="bots">
@@ -136,7 +136,7 @@
           <label for="bot-wechat-allowed">已允许的微信 User ID</label><input id="bot-wechat-allowed" placeholder="扫码本人自动加入；也可逗号分隔填写"><div class="form-grid two"><div><label>邀请其他微信用户</label><div class="inline-input"><button type="button" id="wechat-pair-button">生成配对码</button><strong id="wechat-pair-code"></strong></div></div><p class="hint">扫码本人自动获准聊天。邀请他人时，请对方发 <code>/pair 配对码</code>。</p></div></div>
           <details class="channel-capability-table"><summary>Telegram 与微信现在分别能做什么？</summary><div class="table-scroll"><table><thead><tr><th>能力</th><th>Telegram</th><th>微信 ClawBot</th></tr></thead><tbody><tr><td>文字、表情图</td><td>支持</td><td>支持</td></tr><tr><td>生图</td><td>支持</td><td>暂未开放</td></tr><tr><td>Bot 语音回复</td><td>语音条或音频文件</td><td>音频文件</td></tr><tr><td>输入中、按段分句、超长拆分</td><td>可单独开关</td><td>可单独开关</td></tr><tr><td>人物、外置记忆、MCP、自动唤醒</td><td>支持</td><td>支持；主动发送依赖最近会话上下文</td></tr><tr><td>语音输入</td><td>通过所选 STT 转写</td><td>使用微信随消息提供的转写</td></tr><tr><td>平台专属</td><td>群聊提及、短消息合并</td><td>扫码登录</td></tr></tbody></table></div></details>
           </div></details>
-          <div class="save-row bot-save-row"><span id="bot-runtime-state">尚未连接</span><div class="button-row"><button type="button" id="delete-bot" class="danger">删除</button><button class="primary">保存 Bot</button></div></div>
+          <div class="save-row bot-save-row"><div><span id="bot-runtime-state">尚未连接</span><p id="delete-bot-hint" class="hint" hidden>至少保留一只 Bot。</p></div><div class="button-row"><button type="button" id="delete-bot" class="danger">删除 Bot</button><button class="primary">保存 Bot</button></div></div>
           </fieldset>
         </form>
       </section>
@@ -144,7 +144,14 @@
         <form class="panel" id="profile-form"><div class="panel-heading"><div><p class="eyebrow">PROMPT MODULES</p><h2>人物档案</h2></div><button type="button" id="new-profile">新建</button></div>
           <p>只有已启用、有正文且适用于当前渠道的模块会交给模型。</p><p class="profile-usage" id="profile-usage" aria-live="polite"></p>
           <label for="profile-picker">编辑人物</label><select id="profile-picker"></select><input id="profile-id" type="hidden"><input id="profile-source" type="hidden" value="local"><label for="profile-name">名称</label><input id="profile-name" required>
-          <div class="panel-heading subheading"><div><h3>规则模块</h3><p class="hint">可选模板，也可以从空白开始。</p></div><button type="button" id="add-block">新增空白模块</button></div><div class="template-strip" aria-label="建议模板"><button type="button" class="quiet" data-profile-template="general">+ 通用聊天建议</button><button type="button" class="quiet" data-profile-template="telegram">+ Telegram 建议</button><button type="button" class="quiet" data-profile-template="wechat">+ 微信建议</button><button type="button" class="quiet" data-profile-template="tools">+ 工具与事实建议</button></div><div id="profile-blocks" class="module-list"></div><div class="save-row"><button class="primary">保存人物</button></div>
+          <div class="panel-heading subheading"><h3>规则模块</h3><button type="button" id="add-block">新增空白模块</button></div>
+          <details class="advanced profile-template-library"><summary>常用模块</summary>
+            <p class="hint">从下方模块卡片存入。加入其他人物时会复制一份，可以单独修改。</p>
+            <label for="profile-template-picker">选择常用模块</label><select id="profile-template-picker"></select>
+            <div class="button-row"><button type="button" id="insert-profile-template">加入当前人物</button><button type="button" class="danger quiet" id="delete-profile-template">从常用中删除</button></div>
+          </details>
+          <details class="advanced profile-template-library"><summary>示例模板</summary><div class="template-strip"><button type="button" class="quiet" data-profile-template="general">通用聊天</button><button type="button" class="quiet" data-profile-template="telegram">Telegram</button><button type="button" class="quiet" data-profile-template="wechat">微信</button><button type="button" class="quiet" data-profile-template="tools">工具与事实</button></div></details>
+          <div id="profile-blocks" class="module-list"></div><div class="save-row"><button class="primary">保存人物</button></div>
         </form>
       </section>
       <section class="tab-page" data-page="voices">
@@ -166,7 +173,7 @@
           <p>图片保存在当前部署的私有数据目录。Bot 会从分配给它的表情包里选择。</p>
           <label for="sticker-picker">编辑表情包</label><select id="sticker-picker"></select><input id="sticker-pack-id" type="hidden"><label for="sticker-pack-name">表情包名称</label><input id="sticker-pack-name" required>
           <div class="panel-heading subheading"><h3>表情图片</h3><button type="button" id="add-sticker">增加表情</button></div><div id="sticker-items" class="module-list"></div>
-          <div class="save-row"><span>支持 PNG / JPEG，单张不超过 2 MiB。</span><div class="button-row"><button type="button" id="delete-sticker-pack" class="danger">删除</button><button class="primary">保存表情包</button></div></div>
+          <div class="save-row"><span>支持 PNG / JPEG，单张不超过 2 MiB。</span><button class="primary">保存表情包</button></div>
         </form>
       </section>
     </div></div></div><footer class="studio-footer"><span>LUMENKEEP</span><span>连接 · 能力 · 状态</span><span>BOTANICAL EDITION</span></footer><div class="toast" id="toast" role="status" aria-live="polite"></div>

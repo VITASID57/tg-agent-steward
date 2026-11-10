@@ -52,12 +52,22 @@ export function createApiHandler(services) {
     if (request.method === 'POST' && path === '/api/profiles') return json(response, 201, await controlPlaneStore.upsertProfile(await readJson(request)), headers);
     const profileId = resourceId(path, '/api/profiles/');
     if (profileId && request.method === 'PUT') return json(response, 200, await controlPlaneStore.upsertProfile({ ...(await readJson(request)), id: profileId }), headers);
+    if (profileId && request.method === 'DELETE') { await controlPlaneStore.removeProfile(profileId); return json(response, 200, { ok: true }, headers); }
+    if (request.method === 'POST' && path === '/api/profile-block-templates') {
+      return json(response, 201, await controlPlaneStore.addProfileBlockTemplate(await readJson(request)), headers);
+    }
+    const templateId = resourceId(path, '/api/profile-block-templates/');
+    if (templateId && request.method === 'DELETE') {
+      await controlPlaneStore.removeProfileBlockTemplate(templateId); return json(response, 200, { ok: true }, headers);
+    }
     if (request.method === 'POST' && path === '/api/voice-profiles') return json(response, 201, await controlPlaneStore.upsertVoiceProfile(await readJson(request)), headers);
     const voiceId = resourceId(path, '/api/voice-profiles/');
     if (voiceId && request.method === 'PUT') return json(response, 200, await controlPlaneStore.upsertVoiceProfile({ ...(await readJson(request)), id: voiceId }), headers);
+    if (voiceId && request.method === 'DELETE') { await controlPlaneStore.removeVoiceProfile(voiceId); return json(response, 200, { ok: true }, headers); }
     if (request.method === 'POST' && path === '/api/image-profiles') return json(response, 201, await controlPlaneStore.upsertImageProfile(await readJson(request)), headers);
     const imageId = resourceId(path, '/api/image-profiles/');
     if (imageId && request.method === 'PUT') return json(response, 200, await controlPlaneStore.upsertImageProfile({ ...(await readJson(request)), id: imageId }), headers);
+    if (imageId && request.method === 'DELETE') { await controlPlaneStore.removeImageProfile(imageId); return json(response, 200, { ok: true }, headers); }
     if (request.method === 'POST' && path === '/api/sticker-packs') return json(response, 201, await controlPlaneStore.upsertStickerPack(await readJson(request)), headers);
     const stickerPackId = resourceId(path, '/api/sticker-packs/');
     if (stickerPackId && request.method === 'PUT') return json(response, 200, await controlPlaneStore.upsertStickerPack({ ...(await readJson(request)), id: stickerPackId }), headers);

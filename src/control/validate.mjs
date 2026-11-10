@@ -52,6 +52,7 @@ export function normalizeControlPlane(input, legacy = {}) {
     connections: connections.length ? unique(connections) : fallback.connections,
     profiles: profiles.length ? unique(profiles) : fallback.profiles,
     voiceProfiles: unique(voiceProfiles), imageProfiles: unique(imageProfiles), stickerPacks: unique(stickerPacks),
+    profileBlockTemplates: unique(array(input.profileBlockTemplates).map(normalizeProfileBlock).filter((block) => block.body.trim())),
     bots: bots.length ? unique(bots) : fallback.bots,
   };
 }
@@ -72,16 +73,20 @@ export function normalizeConnection(input) {
 
 export function normalizeProfile(input) {
   if (!input) return null;
-  const blocks = array(input.blocks).map((block, index) => ({
-    id: requiredId(block?.id || `block-${index}`), title: text(block?.title, `规则 ${index + 1}`, 80),
-    body: typeof block?.body === 'string' ? block.body.slice(0, 100_000) : '', enabled: block?.enabled !== false,
-    scope: scopes.has(block?.scope) ? block.scope : 'all', surface: surfaces.has(block?.surface) ? block.surface : 'all',
-  }));
+  const blocks = array(input.blocks).map(normalizeProfileBlock);
   return {
     id: requiredId(input.id), name: text(input.name, '未命名人物', 80),
     residentId: optional(input.residentId, 160), source: text(input.source, 'local', 80),
-    blocks: blocks.length ? unique(blocks) : [{ id: 'block-base', title: '基础人格', body: '', enabled: false, scope: 'all', surface: 'all' }],
+    blocks: unique(blocks),
     createdAt: date(input.createdAt), updatedAt: date(input.updatedAt), revision: positiveInt(input.revision, 1),
+  };
+}
+
+export function normalizeProfileBlock(block, index = 0) {
+  return {
+    id: requiredId(block?.id || `block-${index}`), title: text(block?.title, `规则 ${index + 1}`, 80),
+    body: typeof block?.body === 'string' ? block.body.slice(0, 100_000) : '', enabled: block?.enabled !== false,
+    scope: scopes.has(block?.scope) ? block.scope : 'all', surface: surfaces.has(block?.surface) ? block.surface : 'all',
   };
 }
 

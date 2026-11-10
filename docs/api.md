@@ -13,9 +13,10 @@
 | POST | `/api/connections` | 新建连接；可附 `secret`，仅写入密钥库 |
 | PUT / DELETE | `/api/connections/:id` | 修改或删除；被引用时拒绝删除 |
 | POST | `/api/connections/test` | Body `{ "connectionId": "..." }`，检查配置、CLI / 模型目录或 MCP 工具目录，不发起付费生成请求 |
-| POST / PUT | `/api/profiles[/:id]` | 新建或修改模块化人物档案 |
-| POST / PUT | `/api/voice-profiles[/:id]` | 新建或修改声音线路 |
-| POST / PUT | `/api/image-profiles[/:id]` | 新建或修改生图首选/备用线路 |
+| POST / PUT / DELETE | `/api/profiles[/:id]` | 管理人物档案，可保存空模块列表 |
+| POST / DELETE | `/api/profile-block-templates[/:id]` | 保存或删除实例私有的常用规则模块 |
+| POST / PUT / DELETE | `/api/voice-profiles[/:id]` | 管理声音预设 |
+| POST / PUT / DELETE | `/api/image-profiles[/:id]` | 管理生图首选/备用线路 |
 | POST / PUT / DELETE | `/api/sticker-packs[/:id]` | 管理可复用表情包；被 Bot 引用时拒绝删除 |
 | POST / GET / DELETE | `/api/sticker-assets[/:id]` | 上传、读取或删除 PNG/JPEG 私有资源；被引用时拒绝删除 |
 | POST / PUT / DELETE | `/api/bots[/:id]` | 管理 Bot；可附 `telegramToken`，仅写入密钥库 |
@@ -34,6 +35,11 @@
 
 连接、Bot、声音、生图、表情包和人物是独立资源。Bot 只保存资源 ID，不会复制凭据或
 人物正文。
+
+删除被引用的预设会返回 `409`，响应会列出引用者。表情包删除只移除该包的配置，
+原图使用独立的资源接口管理。常用模块随 `GET /api/control-plane` 的
+`profileBlockTemplates` 返回，包含标题、正文、启用状态、渠道和会话范围。
+人物编辑器加入常用模块时创建独立副本。
 
 Bot 的 `tools.disabledByConnection` 按连接 ID 保存关闭的工具名数组。它和
 `tools.allowedToolNames` 白名单同时生效。Telegram 使用

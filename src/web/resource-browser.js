@@ -1,4 +1,5 @@
-import { $ } from './dom.js';
+import { api } from './api.js';
+import { $, toast } from './dom.js';
 
 const browsers = new Map();
 
@@ -15,11 +16,6 @@ export function resourceSaved(key, id) {
   if (browser) browser.saved(id);
 }
 
-export function resourceRemoved(key) {
-  const browser = browsers.get(key);
-  if (browser) browser.removed();
-}
-
 function createBrowser(app, definition) {
   const form = $(definition.form); const original = [...form.children];
   const editor = document.createElement('fieldset'); editor.className = 'resource-editor'; editor.hidden = true; editor.disabled = true;
@@ -33,12 +29,14 @@ function createBrowser(app, definition) {
 
   let mode = 'list'; let selected = null; let dirty = false; let currentApp = app;
   list.create.onclick = () => openEdit(''); detail.back.onclick = openList; detail.edit.onclick = () => openEdit(selected);
+  detail.remove.onclick = removeSelected;
   cancel.onclick = cancelEdit;
   editor.addEventListener('input', markDirty); editor.addEventListener('change', markDirty);
+  editor.addEventListener('resource-draft-change', () => { if (mode === 'edit') dirty = true; });
 
   function items() { return currentApp.data ? definition.items(currentApp.data) : []; }
   function openList() { selected = null; mode = 'list'; dirty = false; render('back'); }
-  function openDetail(id) { selected = id; mode = 'detail'; dirty = false; render('forward'); }
+  function openDetail(id) { selected = id; mode = 'detail'; dirty = false; detail.error.textContent = ''; render('forward'); }
   function openEdit(id) {
     selected = id || null; mode = 'edit'; dirty = false; definition.fill(currentApp, id || ''); render('forward');
     editor.querySelector('input:not([type="hidden"]), textarea, select')?.focus({ preventScroll: true });
@@ -53,8 +51,22 @@ function createBrowser(app, definition) {
     if (selected && !items().some((item) => item.id === selected)) { selected = null; mode = 'list'; dirty = false; }
     render();
   }
-  function saved(id) { selected = id; mode = 'detail'; dirty = false; }
-  function removed() { selected = null; mode = 'list'; dirty = false; }
+  function saved(id) { selected = id; mode = 'detail'; dirty = false; detail.error.textContent = ''; }
+  async function removeSelected() {
+    const item = items().find((entry) => entry.id === selected);
+    if (!item || !confirm(`删除${definition.singular}「${item.name}」？`)) return;
+    detail.remove.disabled = true;
+    detail.error.textContent = '';
+    try {
+      await api(`${definition.endpoint}/${encodeURIComponent(item.id)}`, { method: 'DELETE' });
+    } catch (error) {
+      detail.error.textContent = error.message;
+      return;
+    } finally { detail.remove.disabled = false; }
+    if (mode === 'detail' && selected === item.id) openList();
+    toast(`${definition.singular}已删除`);
+    await currentApp.reload().catch((error) => toast(error.message, true));
+  }
 
   function render(direction = 'none') {
     list.root.hidden = mode !== 'list'; detail.root.hidden = mode !== 'detail'; editor.hidden = mode !== 'edit'; editor.disabled = mode !== 'edit';
@@ -80,7 +92,7 @@ function createBrowser(app, definition) {
     detail.facts.replaceChildren(...definition.facts(currentApp.data, item).map(([label, value]) => fact(label, value)));
   }
   render();
-  return { refresh, saved, removed };
+  return { refresh, saved };
 }
 
 function listView(definition) {
@@ -98,7 +110,11 @@ function detailView(definition) {
   const back = document.createElement('button'); back.type = 'button'; back.className = 'quiet'; back.textContent = `← 全部${definition.title}`;
   const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'primary'; edit.textContent = '编辑'; nav.append(back, edit);
   const title = document.createElement('h2'); const facts = document.createElement('div'); facts.className = 'resource-facts';
-  root.append(nav, title, facts); return { root, back, edit, title, facts };
+  const footer = document.createElement('div'); footer.className = 'save-row';
+  const error = document.createElement('p'); error.className = 'hint'; error.setAttribute('role', 'status');
+  const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'danger'; remove.textContent = `删除${definition.title}`;
+  footer.append(error, remove); root.append(nav, title, facts, footer);
+  return { root, back, edit, title, facts, remove, error };
 }
 
 function resourceButton(item, definition, onClick) {

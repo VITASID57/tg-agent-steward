@@ -20,7 +20,7 @@ export function fillImageEditor(app, itemId = '') {
 
 function imageRouteCard(app, route = {}) {
   const node = document.createElement('article'); node.className = 'module-card';
-  node.innerHTML = '<div class="module-head"><select class="image-route-connection" aria-label="生图连接"></select><div class="model-picker-inline"><select class="image-route-model" aria-label="生图模型"></select><button type="button" class="quiet image-route-model-refresh">拉取</button></div><input class="image-route-size" aria-label="图片尺寸" placeholder="尺寸可选；留空按请求决定"><button type="button" class="danger">移除</button></div><p class="hint image-route-model-status" role="status"></p><details><summary>线路参数（JSON）</summary><textarea class="image-route-options" rows="5" placeholder="ComfyUI 可填 workflow、promptNodeId、outputNodeId"></textarea></details>';
+  node.innerHTML = '<div class="module-head"><select class="image-route-connection" aria-label="生图连接"></select><div class="model-picker-inline"><select class="image-route-model" aria-label="生图模型"></select><button type="button" class="quiet image-route-model-refresh">拉取</button></div><input class="image-route-size" aria-label="图片尺寸" placeholder="尺寸可选；留空按请求决定"><button type="button" class="danger">移除此线路</button></div><p class="hint image-route-model-status" role="status"></p><details><summary>线路参数（JSON）</summary><textarea class="image-route-options" rows="5" placeholder="ComfyUI 可填 workflow、promptNodeId、outputNodeId"></textarea></details>';
   const imageConnections = app.data.connections.filter((entry) => entry.capabilities.includes('image'));
   options($('.image-route-connection', node), imageConnections.map(named), route.connectionId);
   $('.image-route-size', node).value = route.size || '';

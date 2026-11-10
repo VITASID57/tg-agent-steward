@@ -1,6 +1,7 @@
 import { api, jsonBody } from './api.js';
 import { $, id, options, toast } from './dom.js';
 import { resourceSaved } from './resource-browser.js';
+import { bindProfileTemplates, fillProfileTemplates, saveProfileTemplate } from './profile-template-library.js';
 
 const TEMPLATES = Object.freeze({
   general: {
@@ -24,15 +25,18 @@ const TEMPLATES = Object.freeze({
 export function bindProfileEditor(app) {
   $('#profile-picker').onchange = () => fillProfileEditor(app, $('#profile-picker').value);
   $('#new-profile').onclick = () => fillProfileEditor(app, '');
-  $('#add-block').onclick = () => $('#profile-blocks').append(blockCard());
+  const insert = (block) => { $('#profile-blocks').append(blockCard(app, block)); markBlocksChanged(); };
+  $('#add-block').onclick = () => insert();
   for (const button of document.querySelectorAll('[data-profile-template]')) {
-    button.onclick = () => $('#profile-blocks').append(blockCard(TEMPLATES[button.dataset.profileTemplate]));
+    button.onclick = () => insert(TEMPLATES[button.dataset.profileTemplate]);
   }
+  bindProfileTemplates(app, insert);
   $('#profile-form').onsubmit = (event) => saveProfile(event, app);
 }
 
 export function refreshProfileEditor(app) {
   options($('#profile-picker'), app.data.profiles.map(named), $('#profile-id').value, '新建人物');
+  fillProfileTemplates(app);
 }
 
 export function fillProfileEditor(app, itemId) {
@@ -41,23 +45,31 @@ export function fillProfileEditor(app, itemId) {
   const users = item ? app.data.bots.filter((bot) => bot.profileId === item.id).map((bot) => bot.name) : [];
   $('#profile-usage').textContent = users.length ? `当前由 ${users.join('、')} 使用。保存后会用于这些 Bot 的后续对话。` : '保存人物后，可在 Bot 页为账号选择它。';
   $('#profile-name').value = item?.name || ''; $('#profile-source').value = item?.source || 'local'; $('#profile-blocks').replaceChildren();
-  const blocks = item?.blocks || [{ title: '基础人格', body: '', enabled: false, scope: 'all', surface: 'all' }];
-  for (const block of blocks) $('#profile-blocks').append(blockCard(block));
+  for (const block of item?.blocks || []) $('#profile-blocks').append(blockCard(app, block));
+  fillProfileTemplates(app, '');
 }
 
-function blockCard(block = {}) {
+function blockCard(app, block = {}) {
   const node = document.createElement('article'); node.className = 'module-card'; node.dataset.id = block.id || id('block');
-  node.innerHTML = '<div class="module-head prompt-module-head"><input class="block-title" aria-label="模块标题"><label><input class="block-enabled" type="checkbox"> 启用</label><select class="block-surface" aria-label="适用渠道"><option value="all">全部渠道</option><option value="telegram">仅 Telegram</option><option value="wechat">仅微信</option></select><select class="block-scope" aria-label="会话范围"><option value="all">私聊与群聊</option><option value="private">仅私聊</option></select><button type="button" class="danger">移除</button></div><textarea class="block-body" rows="7" aria-label="模块正文" placeholder="正文为空时不会注入模型"></textarea>';
+  node.innerHTML = '<div class="module-head prompt-module-head"><input class="block-title" aria-label="模块标题" placeholder="模块标题"><label><input class="block-enabled" type="checkbox"> 启用</label><select class="block-surface" aria-label="适用渠道"><option value="all">全部渠道</option><option value="telegram">仅 Telegram</option><option value="wechat">仅微信</option></select><select class="block-scope" aria-label="会话范围"><option value="all">私聊与群聊</option><option value="private">仅私聊</option></select></div><textarea class="block-body" rows="7" aria-label="模块正文" placeholder="正文为空时不会注入模型"></textarea><div class="button-row"><button type="button" class="quiet block-save-template">存为常用</button><button type="button" class="danger quiet block-remove">删除模块</button></div>';
   $('.block-title', node).value = block.title || ''; $('.block-body', node).value = block.body || '';
   $('.block-enabled', node).checked = block.enabled === true; $('.block-surface', node).value = block.surface || 'all';
-  $('.block-scope', node).value = block.scope || 'all'; $('.danger', node).onclick = () => node.remove(); return node;
+  $('.block-scope', node).value = block.scope || 'all';
+  $('.block-save-template', node).onclick = (event) => saveProfileTemplate(app, readBlock(node), event.currentTarget);
+  $('.block-remove', node).onclick = () => { node.remove(); markBlocksChanged(); };
+  return node;
+}
+
+function markBlocksChanged() { $('#profile-blocks').dispatchEvent(new Event('resource-draft-change', { bubbles: true })); }
+
+function readBlock(node) {
+  return { id: node.dataset.id, title: $('.block-title', node).value, body: $('.block-body', node).value,
+    enabled: $('.block-enabled', node).checked, surface: $('.block-surface', node).value, scope: $('.block-scope', node).value };
 }
 
 async function saveProfile(event, app) {
   event.preventDefault(); const existingId = $('#profile-id').value;
-  const blocks = [...$('#profile-blocks').children].map((node) => ({ id: node.dataset.id, title: $('.block-title', node).value,
-    body: $('.block-body', node).value, enabled: $('.block-enabled', node).checked,
-    surface: $('.block-surface', node).value, scope: $('.block-scope', node).value }));
+  const blocks = [...$('#profile-blocks').children].map(readBlock);
   const body = { name: $('#profile-name').value, source: 'local', blocks };
   const saved = await api(existingId ? `/api/profiles/${encodeURIComponent(existingId)}` : '/api/profiles', { method: existingId ? 'PUT' : 'POST', body: jsonBody(body) });
   resourceSaved('profiles', saved.id);

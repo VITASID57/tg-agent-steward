@@ -11,7 +11,7 @@ import { bindProfileEditor, fillProfileEditor, refreshProfileEditor } from './pr
 import { bindConnectionCatalog, fillConnectionCatalog } from './connection-catalog.js';
 import { bindConnectionTest, fillConnectionTest } from './connection-health.js';
 import { bindModelRefresh, loadModelPicker } from './model-picker.js';
-import { bindResourceBrowsers, refreshResourceBrowsers, resourceSaved, resourceRemoved } from './resource-browser.js';
+import { bindResourceBrowsers, refreshResourceBrowsers, resourceSaved } from './resource-browser.js';
 import { createResourceDefinitions } from './resource-definitions.js';
 import { bindToolSwitches, fillToolSwitches, disabledToolSettings } from './tool-switches.js';
 import { bindWakeTargetEditor, fillWakeTarget, wakeTarget } from './wake-target-editor.js';
@@ -31,7 +31,6 @@ export function bindEditors(app) {
   $('#connection-picker').onchange = () => fillConnection(app, $('#connection-picker').value);
   $('#new-connection').onclick = () => fillConnection(app, '');
   $('#connection-form').onsubmit = (event) => saveConnection(event, app);
-  $('#delete-connection').onclick = () => removeConnection(app);
   bindConnectionCatalog();
   bindConnectionTest();
   bindBotCards(app, fillBot); bindBotSections(); bindBotAvatar();
@@ -91,7 +90,6 @@ function fillConnection(app, itemId) {
   $('#connection-access-mode').value = item?.options?.accessMode || 'approval'; $('#connection-stt-model').value = item?.options?.transcriptionModel || '';
   $('#connection-args').value = (item?.options?.args || []).join('\n'); $('#connection-secret-env').value = item?.options?.secretEnv || '';
   $('#connection-secret-state').textContent = item?.hasSecret ? '密钥已保存；留空不会覆盖' : '尚未保存密钥';
-  $('#delete-connection').disabled = !item;
   fillRuntimeMode(item); fillConnectionCatalog(item); fillConnectionTest(item); showConnectionFields();
 }
 
@@ -123,11 +121,6 @@ async function saveConnection(event, app) {
     } };
   const saved = await api(existingId ? `/api/connections/${encodeURIComponent(existingId)}` : '/api/connections', { method: existingId ? 'PUT' : 'POST', body: jsonBody(body) });
   resourceSaved('connections', saved.id); toast('连接预设已保存'); await app.reload();
-}
-
-async function removeConnection(app) {
-  const itemId = $('#connection-id').value; if (!itemId || !confirm('删除这个连接预设？被 Bot 或声音引用时不会允许删除。')) return;
-  await api(`/api/connections/${encodeURIComponent(itemId)}`, { method: 'DELETE' }); resourceRemoved('connections'); toast('连接已删除'); await app.reload();
 }
 
 function fillBot(app, itemId) {
@@ -179,7 +172,10 @@ function fillBot(app, itemId) {
   $('#bot-wake-end').value = item?.wake?.quietEnd || '08:00'; $('#bot-wake-prompt').value = item?.wake?.prompt || '';
   const configured = item?.channel?.type === 'wechat-clawbot' ? item?.hasWechatAccount : item?.hasTelegramToken;
   $('#bot-runtime-state').textContent = item?.runtime?.running ? '正在运行' : (item?.runtime?.lastError || (configured ? '账号已连接，当前未运行' : '尚未连接账号'));
-  $('#delete-bot').disabled = !item || app.data.bots.length <= 1; showProbability(); showStickerProbability(); showWakeSchedule();
+  $('#delete-bot').hidden = !item;
+  $('#delete-bot').disabled = app.data.bots.length <= 1;
+  $('#delete-bot-hint').hidden = !item || app.data.bots.length > 1;
+  showProbability(); showStickerProbability(); showWakeSchedule();
   loadModels(item?.chat?.model || '', item?.chat?.effort || '');
   fillWechatEditor(item);
   refreshBotSections();
@@ -242,7 +238,10 @@ async function saveBotDraft(app) {
 
 async function removeBot(app) {
   const itemId = $('#bot-id').value; if (!itemId || !confirm('删除这个 Bot 配置？')) return;
-  await api(`/api/bots/${encodeURIComponent(itemId)}`, { method: 'DELETE' }); botSaved(null); toast('Bot 已删除'); await app.reload();
+  try {
+    await api(`/api/bots/${encodeURIComponent(itemId)}`, { method: 'DELETE' });
+    botSaved(null); toast('Bot 已删除'); await app.reload();
+  } catch (error) { toast(error.message, true); }
 }
 
 async function pair() {
@@ -285,7 +284,7 @@ function fillVoice(app, itemId) {
 
 function routeCard(app, route = {}) {
   const node = document.createElement('article'); node.className = 'module-card';
-  node.innerHTML = '<div class="module-head"><select class="route-connection" aria-label="语音连接"></select><div class="model-picker-inline"><select class="route-model" aria-label="语音模型"></select><button type="button" class="quiet route-model-refresh">拉取</button></div><input class="route-voice" aria-label="音色 ID" placeholder="音色 ID（不是 API Key）"><button type="button" class="danger">移除</button></div><p class="hint route-model-status" role="status"></p><p class="route-expression" role="status"></p><div class="form-grid two route-reference-fields"><input class="route-reference" aria-label="GPT-SoVITS 参考音频路径" placeholder="GPT-SoVITS 参考音频路径"><input class="route-reference-text" aria-label="参考音频文本" placeholder="参考音频文本"></div>';
+  node.innerHTML = '<div class="module-head"><select class="route-connection" aria-label="语音连接"></select><div class="model-picker-inline"><select class="route-model" aria-label="语音模型"></select><button type="button" class="quiet route-model-refresh">拉取</button></div><input class="route-voice" aria-label="音色 ID" placeholder="音色 ID（不是 API Key）"><button type="button" class="danger">移除此线路</button></div><p class="hint route-model-status" role="status"></p><p class="route-expression" role="status"></p><div class="form-grid two route-reference-fields"><input class="route-reference" aria-label="GPT-SoVITS 参考音频路径" placeholder="GPT-SoVITS 参考音频路径"><input class="route-reference-text" aria-label="参考音频文本" placeholder="参考音频文本"></div>';
   const tts = app.data.connections.filter((entry) => entry.capabilities.includes('tts')); options($('.route-connection', node), tts.map(named), route.connectionId);
   $('.route-voice', node).value = route.voiceId || '';
   $('.route-reference', node).value = route.referenceAudio || ''; $('.route-reference-text', node).value = route.referenceText || '';
