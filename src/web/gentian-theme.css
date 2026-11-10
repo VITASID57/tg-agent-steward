@@ -104,8 +104,6 @@ input[type=range] { min-height:44px; accent-color:#c2d6fa; }
 .module-card { background:#0c193399; }
 .advanced { background:#09162c66; }
 .advanced summary { font-size:13px; min-height:44px; display:list-item; align-content:center; font-weight:500; }
-.status-row strong { font-size:14px; font-weight:500; }
-.status-row small { font-size:12px; line-height:1.8; }
 .badge { border:1px solid #b7cff21c; background:#1b2e4c; color:#bdcce6; }
 .badge.ok { background:#284165; color:#d4e4ff; }
 .save-row { font-size:12px; }
@@ -186,6 +184,7 @@ button.bot-card[aria-pressed="true"] { border-color:var(--pink); box-shadow:0 0 
 .bot-card-copy { display:grid; gap:6px; padding:14px; width:100%; box-sizing:border-box; }
 .bot-card-copy strong { font-size:16px; line-height:1.4; }
 .bot-card-copy small { font-size:12px; color:var(--muted); }
+.bot-card-meta { display:flex; flex-wrap:wrap; gap:2px 8px; }
 .bot-card-copy strong,.bot-card-copy small { overflow-wrap:anywhere; }
 #bot-editor { margin:26px 0 0; padding:0; border:0; min-width:0; }
 #bot-editor legend { padding:0; font-size:20px; font-weight:600; overflow-wrap:anywhere; max-width:100%; }

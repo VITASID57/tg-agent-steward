@@ -2,6 +2,7 @@ import { $, $$ } from './dom.js';
 import { refreshBotSections } from './bot-sections.js';
 import { resetAvatarFeedback, showAvatar } from './bot-avatar.js';
 import { renderBotDetail } from './bot-detail.js';
+import { extraChannelLabel } from './bot-channel-label.js';
 
 let selected = null;
 let mode = 'list';
@@ -93,18 +94,20 @@ function render(app, direction = 'none') {
 function renderList(app) {
   const list = $('#bot-cards'); list.replaceChildren();
   for (const bot of app.data.bots) {
-    const profile = app.data.profiles.find((item) => item.id === bot.profileId);
-    const channel = bot.channel?.type === 'wechat-clawbot' ? '微信' : 'Telegram';
     const card = document.createElement('button'); card.type = 'button'; card.className = 'bot-card';
     card.dataset.botId = bot.id; card.setAttribute('aria-label', `查看 ${bot.name || '未命名 Bot'}`);
     const avatar = document.createElement('span'); avatar.className = 'bot-card-avatar'; showAvatar(avatar, bot.avatar, bot.name);
     const copy = document.createElement('span'); copy.className = 'bot-card-copy';
     const heading = document.createElement('strong'); heading.textContent = bot.name || '未命名 Bot';
-    const detail = document.createElement('small'); detail.textContent = `${channel} · ${profile?.name || '未选人物'} · ${bot.chat?.model || '后端默认模型'}`;
+    const detail = document.createElement('small'); detail.textContent = bot.chat?.model || '默认模型';
+    const meta = document.createElement('span'); meta.className = 'bot-card-meta';
     const state = document.createElement('small'); state.textContent = bot.runtime?.running ? '运行中' : (bot.enabled ? '已启用 · 未运行' : '已停用');
-    copy.append(heading, detail, state); card.append(avatar, copy); card.onclick = () => openDetail(bot.id); list.append(card);
+    meta.append(state);
+    const channel = extraChannelLabel(bot);
+    if (channel) { const label = document.createElement('small'); label.textContent = channel; meta.append(label); }
+    copy.append(heading, detail, meta); card.append(avatar, copy); card.onclick = () => openDetail(bot.id); list.append(card);
   }
-  $('#bot-selection-hint').textContent = app.data.bots.length ? '选择一张卡片查看状态；进入详情后再决定是否编辑。' : '还没有 Bot，点击“新建 Bot”开始。';
+  $('#bot-selection-hint').hidden = app.data.bots.length > 0;
 }
 
 function capture() {

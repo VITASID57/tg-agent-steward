@@ -28,8 +28,8 @@ export function fillWakeTarget(bot) {
   const owner = [...select.options].find((option) => option.value && option.value === ownerId);
   if (owner) owner.dataset.owner = '';
   $('#bot-wake-telegram-hint').textContent = owner
-    ? '选「我的 Telegram 私聊」，保存后按设定的节奏发送。'
-    : '要发给自己，先保存 Bot，再到详情里的「用我的 Telegram 账号聊天」完成绑定或授权，然后回这里选私聊。';
+    ? ''
+    : '要发给自己，请先在 Bot 详情绑定或授权私聊。';
 }
 
 export function wakeTarget(channel) {

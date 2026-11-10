@@ -98,8 +98,8 @@ function fillConnection(app, itemId) {
 function showConnectionFields() {
   $('#connection-api-format').hidden = $('#connection-kind').value !== 'openai-compatible';
   $('#connection-url-help').textContent = $('#connection-kind').value === 'vertex-ai'
-    ? 'Gemini 4 Argon 请使用 global 发布者地址；密钥放置选 Google x-goog-api-key，并填写同一 Google Cloud 项目创建的 API Key。服务账号邮箱不是地址或密钥，Bearer 只适合仍有效的 OAuth access token。'
-    : 'API / MCP 填服务地址；订阅 CLI 与本机命令可以留空。';
+    ? 'Gemini 4 Argon 使用 global 发布者地址。API Key 选 Google x-goog-api-key，OAuth access token 选 Bearer。'
+    : 'API 与远程 MCP 填服务地址；CLI 与本机命令留空。';
   refreshRuntimeExplanation();
 }
 
@@ -143,8 +143,8 @@ function fillBot(app, itemId) {
   options($('#bot-voice-profile'), app.data.voiceProfiles.map(named), item?.voice?.voiceProfileId || '', '不使用语音');
   const usableVoices = app.data.voiceProfiles.filter((voice) => voice.primary?.connectionId);
   $('#bot-voice-profile-help').textContent = usableVoices.length
-    ? '声音连接保存服务账号；声音预设只选择音色、模型和备用顺序。'
-    : '目前没有配置完成的声音预设。请先到“声音”页为预设选择首选连接、模型和音色 ID。';
+    ? ''
+    : '请先在「声音」页配置首选连接、模型和音色。';
   options($('#bot-memory'), memoryConnections.map(named), item?.memoryConnectionId || '', '不接外置记忆');
   options($('#bot-transcription'), sttConnections.map(named), item?.voice?.transcriptionConnectionId || '', '不接语音转写');
   options($('#bot-image-profile'), app.data.imageProfiles.map(named), item?.image?.imageProfileId || '', '不使用生图');

@@ -3,6 +3,7 @@ import { $, $$ } from './dom.js';
 import { bindEditors, fillEditors } from './editors.js';
 import { initMotion, revealWorkspace, showPage } from './motion.js';
 import { openBotDetail, openBotEditor } from './bot-cards.js';
+import { extraChannelLabel } from './bot-channel-label.js';
 
 const app = { data: null, reload };
 let authRequired = true;
@@ -83,19 +84,6 @@ function renderOverview() {
     $(`[data-module-count="${name}"]`).textContent = value;
   });
   const running = app.data.bots.filter((bot) => bot.runtime?.running).length; $('#running-bots').textContent = `${running} 个运行中`;
-  const list = $('#bot-status-list'); list.replaceChildren();
-  for (const bot of app.data.bots) {
-    const connection = app.data.connections.find((item) => item.id === bot.chat.connectionId);
-    const profile = app.data.profiles.find((item) => item.id === bot.profileId);
-    const card = document.createElement('button'); card.type = 'button'; card.className = 'status-row';
-    const copy = document.createElement('div'); const title = document.createElement('strong'); title.textContent = bot.name;
-    const channel = bot.channel?.type === 'wechat-clawbot' ? '微信' : 'Telegram';
-    const detail = document.createElement('small'); detail.textContent = `${channel} · ${connection?.name || '连接缺失'} · ${bot.chat.model || '后端默认模型'} · ${profile?.name || '人物缺失'}${channel === 'Telegram' ? ` · 语音 ${bot.voice.replyProbability}%` : ''}`;
-    const badge = document.createElement('span'); badge.className = `badge ${bot.runtime?.running ? 'ok' : ''}`;
-    badge.textContent = bot.runtime?.running ? '运行中' : (bot.runtime?.lastError || (bot.enabled ? '等待 Token' : '已停用'));
-    copy.append(title, detail); card.append(copy, badge); card.onclick = () => { showPage('bots'); openBotDetail(bot.id); }; list.append(card);
-  }
-  if (!app.data.bots.length) list.textContent = '还没有 Bot。';
   renderMonitorCards();
 }
 
@@ -105,12 +93,16 @@ function renderMonitorCards() {
     const connection = app.data.connections.find((item) => item.id === bot.chat.connectionId);
     const card = document.createElement('article'); card.className = 'bot-monitor-card';
     const title = document.createElement('strong'); title.textContent = bot.name || '未命名 Bot';
-    const detail = document.createElement('small'); detail.textContent = `${bot.channel?.type === 'wechat-clawbot' ? '微信' : 'Telegram'} · ${connection?.name || '连接缺失'} · ${bot.runtime?.running ? '运行中' : '未运行'}`;
+    const detail = document.createElement('small');
+    detail.textContent = [extraChannelLabel(bot), connection?.name || '未选连接'].filter(Boolean).join(' · ');
+    const status = document.createElement('span'); status.className = `badge ${bot.runtime?.running ? 'ok' : ''}`;
+    status.textContent = bot.runtime?.running ? '运行中' : (bot.enabled ? '未运行' : '已停用');
+    const heading = document.createElement('div'); heading.className = 'bot-monitor-heading'; heading.append(title, status);
     const actions = document.createElement('div'); actions.className = 'button-row';
     const view = document.createElement('button'); view.type = 'button'; view.className = 'quiet'; view.textContent = '查看';
     const edit = document.createElement('button'); edit.type = 'button'; edit.textContent = '编辑';
     view.onclick = () => { showPage('bots'); openBotDetail(bot.id); }; edit.onclick = () => { showPage('bots'); openBotEditor(bot.id); };
-    actions.append(view, edit); card.append(title, detail, actions); host.append(card);
+    actions.append(view, edit); card.append(heading, detail, actions); host.append(card);
   }
   if (!app.data.bots.length) host.textContent = '还没有 Bot。';
 }

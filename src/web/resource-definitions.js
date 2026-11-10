@@ -2,7 +2,7 @@ export function createResourceDefinitions({ kinds, fillConnection, fillProfile, 
   const kindName = (kind) => kinds.find(([value]) => value === kind)?.[1] || kind;
   return [
     { key: 'connections', form: '#connection-form', picker: '#connection-picker', newButton: '#new-connection', title: '连接预设', singular: '连接', eyebrow: 'CONNECTION VAULT',
-      description: '先查看已经保存的线路；选择后查看状态，再进入编辑。', items: (data) => data.connections, fill: fillConnection,
+      description: '一个连接可供多只 Bot 或预设使用。', items: (data) => data.connections, fill: fillConnection,
       summary: (item) => `${kindName(item.kind)} · ${item.lastTest?.status === 'passed' ? '自检通过' : '尚未通过自检'}`,
       groups: groupConnections, facts: (_data, item) => [['类型', kindName(item.kind)], ['服务地址', item.baseUrl || '本机订阅 / CLI'], ['密钥', item.hasSecret ? '已保存' : '未保存'], ['最近自检', item.lastTest?.title || '尚未自检']] },
     { key: 'profiles', form: '#profile-form', picker: '#profile-picker', newButton: '#new-profile', title: '人物档案', singular: '人物', eyebrow: 'PROMPT MODULES',
@@ -15,7 +15,7 @@ export function createResourceDefinitions({ kinds, fillConnection, fillProfile, 
       description: '选择首选与备用连接；尺寸留空时按当次请求和提供方能力决定。', items: (data) => data.imageProfiles, fill: fillImage,
       summary: routeCount, facts: (data, item) => routeFacts(data, item, '生图') },
     { key: 'stickers', form: '#sticker-form', picker: '#sticker-picker', newButton: '#new-sticker-pack', title: '表情包', singular: '表情包', eyebrow: 'STICKER PACKS',
-      description: '先查看已建立的表情包，再进入编辑或新建。', items: (data) => data.stickerPacks, fill: fillSticker,
+      description: '同一份表情包可分给多只 Bot。', items: (data) => data.stickerPacks, fill: fillSticker,
       summary: (item) => `${item.stickers?.length || 0} 张表情`, facts: (_data, item) => [['表情数量', `${item.stickers?.length || 0} 张`], ['已启用', `${item.stickers?.filter((entry) => entry.enabled).length || 0} 张`]] },
   ];
 }

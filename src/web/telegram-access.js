@@ -13,27 +13,26 @@ export function renderTelegramAccess(app, bot) {
   const status = $('#telegram-access-status');
   const button = $('#telegram-access-start');
   const link = $('#telegram-access-link');
+  status.hidden = false;
   link.hidden = true;
   button.hidden = true;
   button.disabled = false;
   const username = bot.runtime?.username;
   if (!bot.runtime?.running || !username) {
-    status.textContent = !bot.enabled ? '先在 Bot 设置里启用，再连接你的账号。'
-      : (bot.runtime?.lastError || '保存 BotFather Token 后，这里会显示下一步。');
+    status.textContent = !bot.enabled ? '在编辑页启用 Bot 后可绑定私聊。'
+      : (bot.hasTelegramToken ? 'Bot 启动后可绑定私聊。' : '先在编辑页保存 BotFather Token。');
     return;
   }
   if (bot.telegramAccess?.allowed) {
-    status.textContent = '你的 Telegram 账号已经可以使用这个 Bot。';
+    status.textContent = '';
+    status.hidden = true;
     link.href = `https://t.me/${username}`;
-    link.textContent = '打开 Telegram 聊天';
+    link.textContent = '打开私聊 ↗';
     link.hidden = false;
     return;
   }
   const hasOwner = bot.telegramAccess?.hasOwner;
-  const alreadyHasChats = bot.telegram?.allowedChatIds?.length > 0;
-  status.textContent = hasOwner ? 'Telegram 已连接。点一下，让你已绑定的账号使用这个 Bot。'
-    : alreadyHasChats ? '已有账号获准聊天。绑定你的账号后，新 Bot 可以直接复用。'
-      : 'Telegram 已连接。打开 Telegram，点「开始」即可绑定你的账号。';
+  status.textContent = hasOwner ? '用已绑定的账号给这只 Bot 授权。' : '首次绑定时，在私聊点「开始」。';
   button.textContent = hasOwner ? '允许我的 Telegram 账号' : '去 Telegram 绑定我';
   button.hidden = false;
   button.onclick = () => startAccess(app, bot.id, current);
@@ -47,16 +46,16 @@ async function startAccess(app, botId, current) {
   const popup = window.open('', '_blank');
   if (popup) popup.opener = null;
   button.disabled = true;
-  status.textContent = '正在准备 Telegram 连接…';
+  status.textContent = '正在准备绑定…';
   try {
     const result = await api('/api/telegram/owner-access', { method: 'POST', body: jsonBody({ botId }) });
     if (!active(current)) { popup?.close(); return; }
     if (popup && !popup.closed) popup.location.replace(result.url);
     link.href = result.url;
-    link.textContent = result.allowed ? '打开 Telegram 聊天' : '打开 Telegram 并点「开始」';
+    link.textContent = result.allowed ? '打开私聊 ↗' : '打开绑定链接 ↗';
     link.hidden = false;
     if (result.allowed) {
-      status.textContent = '已允许你的 Telegram 账号。';
+      status.textContent = '已授权。';
       await app.reload();
     } else {
       status.textContent = '请在 Telegram 点「开始」，本页会自动确认。';

@@ -45,9 +45,7 @@ function showChannelFields() {
   }
   for (const node of document.querySelectorAll('[data-telegram-only]')) node.hidden = channel !== 'telegram';
   $('#bot-transcription').disabled = channel === 'wechat-clawbot';
-  $('#bot-voice-delivery-hint').textContent = channel === 'wechat-clawbot'
-    ? '微信 ClawBot 会收到可播放的音频文件，当前未开放原生语音条。'
-    : 'Telegram 可直接收到语音回复。';
+  $('#bot-voice-delivery-hint').hidden = channel !== 'wechat-clawbot';
   $('#bot-channel-section-title').textContent = channel === 'telegram' ? '配对与 Telegram 行为' : '微信权限与行为';
   refreshBotSections();
 }
