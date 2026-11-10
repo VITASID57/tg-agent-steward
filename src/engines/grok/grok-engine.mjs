@@ -18,7 +18,10 @@ export class GrokEngine {
   constructor({ command = process.env.GROK_COMMAND || 'grok', runtimeRoot, spawnProcess = spawn } = {}) {
     this.command = command; this.runtimeRoot = runtimeRoot; this.spawnProcess = spawnProcess; this.active = new Map();
   }
-  async capabilities() {
+  async capabilities({ purpose = 'chat' } = {}) {
+    if (purpose === 'image') return { available: true,
+      models: [{ id: 'grok-imagine', name: 'Grok Imagine', efforts: [] }], efforts: [],
+      source: 'built-in', liveError: '', catalogNote: 'Grok 订阅生图使用 Grok Imagine，不使用聊天模型。' };
     const output = await runText(this.spawnProcess, this.command, ['models']);
     const models = output.split(/\r?\n/u).map((line) => line.match(/^\s*[-*]\s+([^\s]+)/u)?.[1]).filter(Boolean);
     const efforts = ['low', 'medium', 'high', 'xhigh'];

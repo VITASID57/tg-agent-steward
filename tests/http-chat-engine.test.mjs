@@ -88,6 +88,14 @@ test('ElevenLabs voice catalog is pulled and filtered for text to speech', async
   assert.equal(catalog.source, 'live'); assert.deepEqual(catalog.models.map((item) => item.id), ['eleven_v4']);
 });
 
+test('ElevenLabs model catalog does not duplicate v1 when the saved base URL already includes it', async () => {
+  let requested = '';
+  const engine = new HttpChatEngine({ connection: { id: 'voice', kind: 'elevenlabs', baseUrl: 'https://api.elevenlabs.io/v1', cachedModels: [], options: {} },
+    secret: 'voice-key', sessions: sessions(), fetchImpl: async (url) => { requested = String(url); return Response.json([]); } });
+  await engine.capabilities({ purpose: 'tts' });
+  assert.equal(requested, 'https://api.elevenlabs.io/v1/models');
+});
+
 test('providers without a live catalog expose selectable built-in routes instead of free text', async () => {
   const engine = new HttpChatEngine({ connection: { id: 'minimax', kind: 'minimax', baseUrl: '', cachedModels: [], options: {} },
     secret: '', sessions: sessions(), fetchImpl: async () => { throw new Error('should not fetch'); } });

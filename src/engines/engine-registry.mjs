@@ -16,7 +16,8 @@ export class EngineRegistry {
 
   async capabilityFor(connection, options = {}) {
     try { return await (await this.forConnection(connection)).capabilities(options); }
-    catch (error) { return { available: false, error: error.message, models: connection.cachedModels.map((id) => ({ id, name: id, efforts: [] })), efforts: [] }; }
+    catch (error) { const models = (connection.cachedModels || []).map((id) => ({ id, name: id, efforts: [] }));
+      return { available: false, error: error.message, models, efforts: [], source: models.length ? 'saved' : 'unavailable', liveError: error.message }; }
   }
 
   async capabilityForDraft(connection, secret = '', options = {}) {
@@ -26,7 +27,8 @@ export class EngineRegistry {
       if (!this.apiEngineFactory || !this.apiSessions) throw new Error(`不支持的连接：${connection.kind}`);
       return await this.apiEngineFactory({ connection, secret, sessions: this.apiSessions }).capabilities(options);
     } catch (error) {
-      return { available: false, error: error.message, models: connection.cachedModels?.map((id) => ({ id, name: id, efforts: [] })) || [], efforts: [] };
+      const models = connection.cachedModels?.map((id) => ({ id, name: id, efforts: [] })) || [];
+      return { available: false, error: error.message, models, efforts: [], source: models.length ? 'saved' : 'unavailable', liveError: error.message };
     }
   }
 

@@ -1,4 +1,5 @@
 import { shouldSendVoice } from '../voice/probability.mjs';
+import { imageRequestPrompt, isExplicitVoiceRequest } from '../media/request-intent.mjs';
 
 const USER_MESSAGE = 1;
 const TEXT_ITEM = 1;
@@ -101,16 +102,17 @@ export class WechatRuntime {
 
   async #draw(bot, senderId, contextToken, text, signal) {
     const match = text.match(/^\/draw(?:\s+|$)([\s\S]*)/u);
-    if (!match) return false;
+    const prompt = match?.[1]?.trim() || imageRequestPrompt(text);
+    if (!prompt) return false;
     if (!bot.image?.enabled || !bot.image.imageProfileId) {
       await this.client.sendText(senderId, contextToken, '这个 Bot 还没有启用生图路线。', signal); return true;
     }
-    if (!match[1].trim()) {
+    if (match && !match[1].trim()) {
       await this.client.sendText(senderId, contextToken, '请在 /draw 后面写想画的内容。', signal); return true;
     }
     const ticket = await this.#startTyping(bot, senderId, contextToken, signal);
     try {
-      const result = await this.imageService.generate(bot.image.imageProfileId, match[1].trim(), signal);
+      const result = await this.imageService.generate(bot.image.imageProfileId, prompt, signal);
       await this.client.sendImage(senderId, contextToken, result.image, signal);
     } finally { await this.client.stopTyping(senderId, ticket, signal).catch(() => {}); }
     return true;
@@ -125,10 +127,11 @@ export class WechatRuntime {
         surface: 'wechat', botId: this.botId, group: false, voiceGuide, ...context,
       });
       if (context.wake && result.text.trim() === '[[SILENT]]') return { sent: false, reason: 'silent' };
-      let voice = null;
-      if (bot.voice?.voiceProfileId && shouldSendVoice(bot.voice, this.random)) {
+      let voice = null; let voiceError = null;
+      const explicitVoice = !context.wake && isExplicitVoiceRequest(text);
+      if (bot.voice?.enabled && bot.voice.voiceProfileId && (explicitVoice || shouldSendVoice(bot.voice, this.random))) {
         voice = await this.voiceService.synthesize(bot.voice.voiceProfileId, result.speechText || result.text, signal)
-          .catch((error) => { this.logger.error(`WeChat voice ${this.botId}: ${safeError(error)}`); return null; });
+          .catch((error) => { voiceError = error; this.logger.error(`WeChat voice ${this.botId}: ${safeError(error)}`); return null; });
       }
       if (!voice || bot.voice.sendTextWithVoice) {
         for (const part of splitWechatMessage(result.text, bot.wechat)) {
@@ -137,6 +140,7 @@ export class WechatRuntime {
         }
       }
       if (voice) await this.client.sendFile(senderId, contextToken, voice.audio, `reply.${voice.extension}`, signal);
+      if (explicitVoice && voiceError) await this.client.sendText(senderId, contextToken, `语音没有发出去：${safeError(voiceError)}`, signal);
       let stickerSent = false;
       if (result.sticker && this.stickerService) {
         const asset = await this.stickerService.readAsset(result.sticker.assetId);

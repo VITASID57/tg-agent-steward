@@ -86,6 +86,26 @@ test('wechat pairing grants an unknown sender before normal conversation', async
   assert.equal(sent[0], '配对成功，现在可以聊天了。');
 });
 
+test('wechat routes a clear natural-language image request to the configured image profile', async () => {
+  const sent = []; let polls = 0; let prompt = '';
+  const client = { async notifyStart() {}, async notifyStop() {},
+    async getUpdates(_buffer, signal) {
+      if (polls++ === 0) return { msgs: [{ msg_id: 'draw-1', message_type: 1, from_user_id: 'user-1', context_token: 'ctx',
+        item_list: [{ type: 1, text_item: { text: '给我画张图，随便画啥' } }] }] };
+      return new Promise((resolve) => signal.addEventListener('abort', () => resolve({ msgs: [] }), { once: true }));
+    },
+    async sendImage(_user, _token, image) { sent.push(image); }, async startTyping() { return null; }, async stopTyping() {},
+  };
+  const bot = { id: 'wechat-bot', enabled: true, channel: { type: 'wechat-clawbot' },
+    wechat: { allowedUserIds: ['user-1'] }, image: { enabled: true, imageProfileId: 'art' } };
+  const runtime = new WechatRuntime({ botId: 'wechat-bot', client, stateFile: memoryFile(),
+    controlPlaneStore: { async get() { return { bots: [bot] }; } },
+    manager: { async reply() { throw new Error('image request should not reach chat'); } },
+    imageService: { async generate(_profile, value) { prompt = value; return { image: Buffer.from([1]) }; } }, logger: { error() {} } });
+  await runtime.start(); await waitFor(() => sent.length === 1); runtime.stop();
+  assert.equal(prompt, '给我画张图，随便画啥'); assert.equal(sent[0][0], 1);
+});
+
 test('wechat proactive wake reuses the latest target context and respects SILENT', async () => {
   const sent = []; const stateFile = memoryFile({ bots: { 'wechat-bot': { contacts: {
     'user-1': { contextToken: 'recent-context', at: '2026-11-08T10:00:00.000Z' },

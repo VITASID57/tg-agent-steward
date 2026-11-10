@@ -58,7 +58,19 @@ async function elevenLabs(connection, route, secret, text, signal, fetchImpl) {
     method: 'POST', signal, headers: { 'xi-api-key': secret, Accept: 'audio/mpeg', 'Content-Type': 'application/json' },
     body: JSON.stringify({ text, model_id: route.model || 'eleven_v4' }),
   });
+  if (!response.ok) throw await elevenLabsFailure(response);
   return binary(response, 'audio/mpeg', 'mp3');
+}
+
+async function elevenLabsFailure(response) {
+  const data = await response.json().catch(() => null);
+  const code = data?.detail?.status || data?.detail?.code || data?.error?.code;
+  if (code === 'api_key_id_used_as_api_key') {
+    return new Error('填入的是 API Key ID，不是真实 API Key；请在 ElevenLabs 创建或轮换密钥，并填写仅显示一次的 sk_… 密钥');
+  }
+  if (response.status === 401 || response.status === 403) return new Error('凭据未被接受');
+  const message = data?.detail?.message || data?.error?.message;
+  return new Error(message ? `ElevenLabs：${message}` : `语音生成失败（HTTP ${response.status}）`);
 }
 
 async function miniMax(connection, route, secret, text, signal, fetchImpl) {

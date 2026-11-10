@@ -20,7 +20,10 @@ export class CodexEngine {
     }
   }
 
-  async capabilities() {
+  async capabilities({ purpose = 'chat' } = {}) {
+    if (purpose === 'image') return { available: true,
+      models: [{ id: 'subscription-imagegen', name: 'Codex 内置生图', efforts: [] }], efforts: [],
+      source: 'built-in', liveError: '', catalogNote: 'Codex 订阅生图使用内置 image_gen，不使用聊天模型。' };
     const client = this.clients.agent;
     await client.start();
     const models = [];
@@ -34,7 +37,8 @@ export class CodexEngine {
       })));
       cursor = page.nextCursor;
     } while (cursor);
-    return { available: true, models, efforts: [...new Set(models.flatMap((model) => model.efforts))] };
+    return { available: true, models, efforts: [...new Set(models.flatMap((model) => model.efforts))],
+      source: 'live', liveError: '' };
   }
 
   async complete({ sessionId, prompt, settings, instructions, requestKey }) {

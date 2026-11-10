@@ -26,6 +26,8 @@ export class ClaudeEngine {
         .map((id) => ({ id, name: id, efforts: [] })),
       efforts: effortText.split(',').map((item) => item.trim()).filter(Boolean),
       supportsPromptSnapshot: help.includes('--system-prompt-snapshot'),
+      source: 'built-in', liveError: '',
+      catalogNote: 'Claude Code CLI 不提供实时模型目录；这里显示 CLI 支持的模型别名。',
     };
   }
 

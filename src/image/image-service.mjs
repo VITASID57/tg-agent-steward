@@ -1,10 +1,11 @@
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdtemp, readFile, readdir, rm, stat } from 'node:fs/promises';
+import { homedir, tmpdir } from 'node:os';
 import { extname, join } from 'node:path';
 import { runProcess } from './process-runner.mjs';
 import { firstImageFromZip } from './zip-image.mjs';
 
 const MAX_IMAGE = 25 * 1024 * 1024;
+const subscriptionQueues = new Map();
 
 export class ImageService {
   constructor({ controlPlaneStore, secretStore, fetchImpl = fetch, runImpl = runProcess }) {
@@ -34,7 +35,9 @@ export async function generateImageRoute(input) {
   if (connection.kind === 'vertex-ai') return vertexImage(input);
   if (connection.kind === 'comfyui') return comfyImage(input);
   if (connection.kind === 'novelai') return novelAiImage(input);
-  if (connection.kind === 'codex' || connection.kind === 'grok-build') return subscriptionImage(input);
+  if (connection.kind === 'codex' || connection.kind === 'grok-build') {
+    return serializeSubscription(connection.kind, () => subscriptionImage(input));
+  }
   throw new Error(`不支持的生图连接：${connection.kind}`);
 }
 
@@ -106,20 +109,37 @@ async function subscriptionImage({ connection, prompt, signal, runImpl }) {
   const folder = await mkdtemp(join(tmpdir(), 'tg-steward-image-'));
   try {
     const env = stripApiCredentials(process.env); const command = connection.options?.command || (connection.kind === 'codex' ? 'codex' : 'grok');
+    const generatedRoot = connection.kind === 'codex'
+      ? join(process.env.CODEX_HOME || join(homedir(), '.codex'), 'generated_images') : '';
+    const before = new Set(generatedRoot ? await findImages(generatedRoot) : []);
     const instruction = `Generate exactly one image for this prompt: ${prompt}\nSave the final PNG or JPEG in the current working directory.`;
     const args = connection.kind === 'codex'
       ? ['exec', '-s', 'workspace-write', '-C', folder, '--skip-git-repo-check', '--ephemeral', `$imagegen ${instruction}`]
       : ['--cwd', folder, '-p', `Use Grok Imagine. ${instruction}`];
     await runImpl(command, args, { cwd: folder, env, signal, timeoutMs: Number(connection.options?.timeoutMs) || 240_000 });
-    const files = await findImages(folder); if (!files.length) throw new Error('订阅生图完成但没有找到输出图片');
-    return checked(await readFile(files[0]));
+    const localFiles = await findImages(folder);
+    const generatedFiles = generatedRoot ? (await findImages(generatedRoot)).filter((file) => !before.has(file)) : [];
+    const file = await newestImage([...localFiles, ...generatedFiles]);
+    if (!file) throw new Error('订阅生图完成但没有找到输出图片');
+    return checked(await readFile(file));
   } finally { await rm(folder, { recursive: true, force: true }); }
 }
 
 async function findImages(folder) {
-  const items = await readdir(folder, { withFileTypes: true, recursive: true });
-  return items.filter((item) => item.isFile() && ['.png', '.jpg', '.jpeg', '.webp'].includes(extname(item.name).toLowerCase()))
-    .map((item) => join(item.parentPath || item.path || folder, item.name));
+  try {
+    const items = await readdir(folder, { withFileTypes: true, recursive: true });
+    return items.filter((item) => item.isFile() && ['.png', '.jpg', '.jpeg', '.webp'].includes(extname(item.name).toLowerCase()))
+      .map((item) => join(item.parentPath || item.path || folder, item.name));
+  } catch (error) { if (error.code === 'ENOENT') return []; throw error; }
+}
+async function newestImage(files) {
+  const dated = await Promise.all(files.map(async (file) => ({ file, mtime: (await stat(file)).mtimeMs })));
+  return dated.sort((a, b) => b.mtime - a.mtime)[0]?.file || '';
+}
+function serializeSubscription(key, work) {
+  const previous = subscriptionQueues.get(key) || Promise.resolve();
+  const current = previous.catch(() => {}).then(work); subscriptionQueues.set(key, current);
+  return current.finally(() => { if (subscriptionQueues.get(key) === current) subscriptionQueues.delete(key); });
 }
 function stripApiCredentials(env) { const next = { ...env }; for (const key of Object.keys(next)) if (/(?:API_KEY|TOKEN|SECRET)$/iu.test(key)) delete next[key]; return next; }
 function parseSize(value) { const match = String(value || '').match(/^(\d{2,5})x(\d{2,5})$/u); return match ? [Number(match[1]), Number(match[2])] : [1024, 1024]; }

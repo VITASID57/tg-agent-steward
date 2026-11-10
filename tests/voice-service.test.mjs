@@ -36,6 +36,14 @@ test('ElevenLabs uses v4 by default and keeps supported expressive tags', async 
   assert.equal(result.mime, 'audio/mpeg');
 });
 
+test('ElevenLabs explains when an API key ID was pasted instead of the secret key', async () => {
+  await assert.rejects(() => synthesizeRoute({
+    connection: { kind: 'elevenlabs', baseUrl: 'https://eleven.test/v1', options: {} },
+    route: { voiceId: 'voice-id' }, secret: 'key-id', text: '你好',
+    fetchImpl: async () => Response.json({ detail: { status: 'api_key_id_used_as_api_key' } }, { status: 400 }),
+  }), /API Key ID.*sk_/u);
+});
+
 test('Vertex raw 24 kHz PCM is wrapped as a playable WAV file', async () => {
   const pcm = Buffer.from([0, 0, 1, 0]);
   const result = await synthesizeRoute({

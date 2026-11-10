@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { generateImageRoute, ImageService } from '../src/image/image-service.mjs';
 
 const png = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.from([1, 2, 3])]);
@@ -45,6 +48,22 @@ test('NovelAI route extracts an image from a ZIP response', async () => {
     route: { size: '832x1216' }, prompt: 'character', secret: 'token',
     fetchImpl: async (_url, init) => { assert.equal(init.headers.Authorization, 'Bearer token'); return new Response(zipped, { headers: { 'content-type': 'application/zip' } }); } });
   assert.deepEqual(result.image, png);
+});
+
+test('Codex subscription images are collected from CODEX_HOME generated_images', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'codex-home-')); const previous = process.env.CODEX_HOME;
+  process.env.CODEX_HOME = root;
+  try {
+    const result = await generateImageRoute({ connection: { kind: 'codex', options: {} }, route: {}, prompt: 'gentian',
+      runImpl: async () => {
+        const output = join(root, 'generated_images', 'thread', 'result.png');
+        await mkdir(join(root, 'generated_images', 'thread'), { recursive: true }); await writeFile(output, png);
+      } });
+    assert.deepEqual(result.image, png); assert.equal(result.mime, 'image/png');
+  } finally {
+    if (previous === undefined) delete process.env.CODEX_HOME; else process.env.CODEX_HOME = previous;
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 function storedZip(name, data) {

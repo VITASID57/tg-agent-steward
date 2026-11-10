@@ -43,11 +43,16 @@ export function bindModelRefresh(button, loader) {
 }
 
 function catalogMessage(source, count, liveError = '', catalogNote = '') {
-  if (!count) return '这条连接没有返回可选择的模型，将由连接自身决定。';
+  if (!count) return liveError
+    ? `实时目录未连通（${liveError}），也没有已保存或内置的可选模型。`
+    : '这条连接没有返回可选择的模型，将由连接自身决定。';
   if (catalogNote) return `${catalogNote} 共 ${count} 个可选项。`;
   if (source === 'live') return `已从连接实时拉取 ${count} 个模型。`;
   if (source === 'built-in') return liveError
     ? `实时目录未连通（${liveError}）；先显示 ${count} 个内置选项。`
     : `这类连接使用 ${count} 个内置可用选项。`;
-  return `实时目录暂不可用，显示已保存的 ${count} 个模型。`;
+  if (source === 'saved') return liveError
+    ? `实时目录未连通（${liveError}）；显示已保存的 ${count} 个模型。`
+    : `显示已保存的 ${count} 个模型。`;
+  return `模型目录来源未标明；显示 ${count} 个可选项。`;
 }

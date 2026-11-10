@@ -132,7 +132,7 @@ export class HttpChatEngine {
 
   async #elevenLabsModels(purpose) {
     const base = this.connection.baseUrl || 'https://api.elevenlabs.io';
-    const data = await requestJson(this.fetch, endpoint(base, '/v1/models'), {
+    const data = await requestJson(this.fetch, elevenLabsEndpoint(base, '/models'), {
       headers: this.secret ? { 'xi-api-key': this.secret } : {},
     }, undefined, 30_000);
     return (Array.isArray(data) ? data : []).filter((item) => purpose !== 'tts' || item?.can_do_text_to_speech !== false)
@@ -210,6 +210,10 @@ async function requestJson(fetchImpl, url, init, signal, timeoutMs = TIMEOUT_MS)
 function endpoint(base, suffix) {
   const value = base.replace(/\/+$/u, '');
   return value.endsWith(suffix) ? value : `${value}${suffix}`;
+}
+function elevenLabsEndpoint(base, suffix) {
+  const value = String(base || '').replace(/\/+$/u, '');
+  return /\/v1$/u.test(value) ? `${value}${suffix}` : `${value}/v1${suffix}`;
 }
 function vertexCatalogUrl(base) {
   const url = new URL(base);

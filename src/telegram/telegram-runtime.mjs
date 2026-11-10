@@ -2,6 +2,7 @@ import { MessageBatcher } from './batcher.mjs';
 import { handleCommand } from './commands.mjs';
 import { splitTelegramMessage } from './message-format.mjs';
 import { shouldSendVoice } from '../voice/probability.mjs';
+import { imageRequestPrompt, isExplicitVoiceRequest } from '../media/request-intent.mjs';
 
 export class TelegramRuntime {
   constructor({ botId, client, controlPlaneStore, manager, pairing, engines, voiceService, transcriptionService, imageService, stickerService, toolBroker, eventStore = null, random = Math.random, logger = console }) {
@@ -107,14 +108,27 @@ export class TelegramRuntime {
       typingTimer = setInterval(() => this.client.sendTyping(chatId).catch(() => {}), 4500);
     }
     try {
+      const imagePrompt = !context.wake ? imageRequestPrompt(text) : null;
+      if (imagePrompt) {
+        if (!bot.image?.enabled || !bot.image.imageProfileId) {
+          await this.client.sendMessage(chatId, '这个 Bot 还没有启用生图路线。');
+          return { sent: true, image: false };
+        }
+        const image = await this.imageService.generate(bot.image.imageProfileId, imagePrompt);
+        await this.client.sendPhoto(chatId, image.image, `image.${image.extension}`, image.fallbackNote || '');
+        await this.eventStore?.record(bot.id, { kind: 'reply', status: 'success', title: '图片回复已发送', detail: '生图' });
+        return { sent: true, image: true };
+      }
       const voiceGuide = bot.voice.enabled && bot.voice.voiceProfileId && this.voiceService.instruction
         ? await this.voiceService.instruction(bot.voice.voiceProfileId).catch(() => '') : '';
       const result = await this.manager.reply(chatId, text, { surface: 'telegram', botId: bot.id, voiceGuide, ...context });
       if (context.wake && result.text.trim() === '[[SILENT]]') return { sent: false, reason: 'silent' };
-      let voice = null;
-      if ((result.speechText || result.text) && bot.voice.voiceProfileId && shouldSendVoice(bot.voice, this.random)) {
+      let voice = null; let voiceError = null;
+      const explicitVoice = !context.wake && isExplicitVoiceRequest(text);
+      if ((result.speechText || result.text) && bot.voice.enabled && bot.voice.voiceProfileId
+        && (explicitVoice || shouldSendVoice(bot.voice, this.random))) {
         voice = await this.voiceService.synthesize(bot.voice.voiceProfileId, result.speechText || result.text).catch((error) => {
-          this.logger.error(`Voice ${bot.id}: ${error.message}`); return null;
+          voiceError = error; this.logger.error(`Voice ${bot.id}: ${error.message}`); return null;
         });
       }
       if (!voice || bot.voice.sendTextWithVoice) {
@@ -127,6 +141,7 @@ export class TelegramRuntime {
         if (voice.mime === 'audio/wav') await this.client.sendAudio(chatId, voice.audio, `reply.${voice.extension}`);
         else await this.client.sendVoice(chatId, voice.audio, `reply.${voice.extension}`);
       }
+      if (explicitVoice && voiceError) await this.client.sendMessage(chatId, `语音没有发出去：${safeError(voiceError)}`);
       let stickerSent = false;
       if (result.sticker && this.stickerService) {
         try {
