@@ -1,6 +1,19 @@
 # Validation status
 
-Last checked: 2026-11-09.
+Last checked: 2026-11-10.
+
+## v0.4 update
+
+- A self-hosted installation confirmed Telegram owner binding, private chat,
+  voice, sticker delivery, Codex image delivery and Vertex image delivery via
+  `/draw`. WeChat passed QR login, chat, stickers, audio-file delivery and a
+  scheduled wake on that installation.
+- Telegram wake configuration and scheduling were verified without sending an
+  extra test message. An isolated browser check verified the new private-chat
+  selector and that the saved target was persisted.
+- The offline suite covers the provider and tool routes with test doubles.
+  Each installation still needs to verify its own accounts, entitlements and
+  provider availability.
 
 ## Passed in this workspace
 
@@ -31,9 +44,8 @@ Last checked: 2026-11-09.
   narrow navigation scrolls horizontally by design.
 - Real local Grok Build subscription smoke: authenticated ACP turn returned the
   exact requested `SMOKE_OK` and a resumable session identifier.
-- Codex/Grok subscription image command shape comes from a previously real-smoked
-  Mimi Town bridge; this repository's tests use a fake process runner and did
-  not spend subscription quota.
+- Subscription image command tests use a fake process runner and do not spend
+  subscription quota.
 
 ## Bot card UI acceptance
 
@@ -110,7 +122,8 @@ to refuse `0.0.0.0`.
 
 ## Still requires deployment-specific acceptance
 
-- A real Telegram Bot Token, polling, pairing and outbound voice upload.
+- Each new Telegram Bot Token and WeChat account, including delivery from that
+  installation to its intended chats.
 - Each user's image, TTS, STT, memory and MCP credentials or local services.
 - Official-service account activation, OAuth/login and any order/payment flow.
 - Any private memory adapter and downstream host-product plugin package.

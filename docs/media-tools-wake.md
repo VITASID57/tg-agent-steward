@@ -43,6 +43,7 @@ when adding new ones. Use entries like these:
 ```text
 draw - 画图，输入 /draw 加画面描述
 voice - 用声音预设回一句语音
+new - 开启新会话
 status - 查看当前聊天引擎和模型
 ```
 
