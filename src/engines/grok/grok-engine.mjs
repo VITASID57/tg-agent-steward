@@ -22,7 +22,8 @@ export class GrokEngine {
     const output = await runText(this.spawnProcess, this.command, ['models']);
     const models = output.split(/\r?\n/u).map((line) => line.match(/^\s*[-*]\s+([^\s]+)/u)?.[1]).filter(Boolean);
     const efforts = ['low', 'medium', 'high', 'xhigh'];
-    return { available: true, models: models.map((id) => ({ id, name: id, efforts })), efforts };
+    return { available: true, models: models.map((id) => ({ id, name: id, efforts })), efforts,
+      source: 'live', liveError: '' };
   }
   async complete({ sessionId, prompt, settings, instructions, requestKey }) {
     const mode = settings.runtimeMode === 'agent' ? 'agent' : 'chat';

@@ -11,11 +11,16 @@ export class HttpChatEngine {
   }
 
   async capabilities({ purpose = 'chat' } = {}) {
-    let models = []; let source = 'saved'; let liveError = '';
+    let models = []; let source = 'saved'; let liveError = ''; let catalogNote = '';
     try {
       models = await this.#liveModels(purpose);
       if (models.length) source = 'live';
-    } catch (error) { liveError = error.message; }
+    } catch (error) {
+      liveError = error.message;
+      if (this.connection.kind === 'vertex-ai' && /API keys are not supported by this API/iu.test(liveError)) {
+        catalogNote = 'Google 的实时模型目录只接受 OAuth；API Key 仍可用于模型调用，当前显示内置 Vertex 模型。';
+      }
+    }
     if (this.connection.kind === 'vertex-ai') models = mergeModels(models, builtInModels(this.connection.kind, purpose));
     if (!models.length) models = this.connection.cachedModels.map((id) => ({ id, name: id }));
     if (!models.length) { models = builtInModels(this.connection.kind, purpose); source = 'built-in'; }
@@ -24,7 +29,7 @@ export class HttpChatEngine {
       ? ['minimal', 'low', 'medium', 'high'] : ['low', 'medium', 'high'];
     return { available: true, models: models.map((item) => ({ id: item.id, name: item.name || item.id,
       efforts: item.efforts || (purpose === 'chat' ? efforts : []) })), efforts: purpose === 'chat' ? efforts : [],
-      supportsManualModel: false, source, liveError };
+      supportsManualModel: false, source, liveError, catalogNote };
   }
 
   async complete({ sessionId, prompt, settings, instructions }) {

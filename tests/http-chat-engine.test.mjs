@@ -65,6 +65,18 @@ test('Vertex fallback exposes current Gemini models with valid Argon thinking le
   assert.match(result.liveError, /401/u);
 });
 
+test('Vertex API-key catalog restriction is explained without marking generation unavailable', async () => {
+  const engine = new HttpChatEngine({ connection: { id: 'vertex', kind: 'vertex-ai',
+    baseUrl: 'https://aiplatform.googleapis.com/v1/projects/project-1/locations/global/publishers/google', cachedModels: [], options: {} },
+  secret: 'working-generation-key', sessions: sessions(), fetchImpl: async () => Response.json({ error: {
+    message: 'API keys are not supported by this API. Expected OAuth2 access token',
+  } }, { status: 401 }) });
+  const result = await engine.capabilities({ purpose: 'chat' });
+  assert.equal(result.available, true);
+  assert.equal(result.source, 'built-in');
+  assert.match(result.catalogNote, /API Key 仍可用于模型调用/u);
+});
+
 test('ElevenLabs voice catalog is pulled and filtered for text to speech', async () => {
   const engine = new HttpChatEngine({ connection: { id: 'voice', kind: 'elevenlabs', baseUrl: 'https://api.elevenlabs.io', cachedModels: [], options: {} },
     secret: 'voice-key', sessions: sessions(), fetchImpl: async (url, init) => {

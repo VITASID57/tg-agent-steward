@@ -23,7 +23,7 @@ export async function loadModelPicker({ select, connectionId, purpose, selected 
     if (selected && !items.some((item) => item.value === selected)) items.unshift({ value: selected, label: `${selected}（当前保存）` });
     options(select, items, selected, emptyLabel);
     select.disabled = false;
-    if (status) status.textContent = catalogMessage(result.source, models.length, result.liveError);
+    if (status) status.textContent = catalogMessage(result.source, models.length, result.liveError, result.catalogNote);
     onLoaded?.(result);
     return result;
   } catch (error) {
@@ -42,8 +42,9 @@ export function bindModelRefresh(button, loader) {
   if (button) button.onclick = () => loader();
 }
 
-function catalogMessage(source, count, liveError = '') {
+function catalogMessage(source, count, liveError = '', catalogNote = '') {
   if (!count) return '这条连接没有返回可选择的模型，将由连接自身决定。';
+  if (catalogNote) return `${catalogNote} 共 ${count} 个可选项。`;
   if (source === 'live') return `已从连接实时拉取 ${count} 个模型。`;
   if (source === 'built-in') return liveError
     ? `实时目录未连通（${liveError}）；先显示 ${count} 个内置选项。`
