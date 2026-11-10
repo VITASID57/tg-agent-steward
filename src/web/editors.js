@@ -14,6 +14,7 @@ import { bindModelRefresh, loadModelPicker } from './model-picker.js';
 import { bindResourceBrowsers, refreshResourceBrowsers, resourceSaved, resourceRemoved } from './resource-browser.js';
 import { createResourceDefinitions } from './resource-definitions.js';
 import { bindToolSwitches, fillToolSwitches, disabledToolSettings } from './tool-switches.js';
+import { bindWakeTargetEditor, fillWakeTarget, wakeTarget } from './wake-target-editor.js';
 
 const KINDS = [
   ['codex', 'Codex 订阅 / CLI'], ['claude', 'Claude Code 订阅 / CLI'], ['grok-build', 'Grok Build 订阅 / CLI'],
@@ -48,6 +49,7 @@ export function bindEditors(app) {
   $('#bot-sticker-probability').oninput = showStickerProbability;
   $('#bot-wake-mode').onchange = showWakeSchedule;
   $('#bot-wake-quiet-enabled').onchange = showWakeSchedule;
+  bindWakeTargetEditor();
   bindProfileEditor(app);
   $('#voice-picker').onchange = () => fillVoice(app, $('#voice-picker').value);
   $('#new-voice').onclick = () => fillVoice(app, '');
@@ -167,9 +169,8 @@ function fillBot(app, itemId) {
   $('#bot-stickers-enabled').checked = item?.stickers?.enabled ?? false; $('#bot-sticker-probability').value = item?.stickers?.replyProbability ?? 30;
   $('#bot-tool-names').value = item?.tools?.allowedToolNames?.join(', ') || ''; $('#bot-tool-writes').checked = item?.tools?.allowWrites ?? false;
   fillToolSwitches(item?.tools);
-  const suggestedWakeTarget = item?.channel?.type === 'wechat-clawbot' && item?.wechat?.allowedUserIds?.length === 1
-    ? item.wechat.allowedUserIds[0] : '';
-  $('#bot-wake-enabled').checked = item?.wake?.enabled ?? false; $('#bot-wake-chat').value = item?.wake?.targetChatId || suggestedWakeTarget;
+  $('#bot-wake-enabled').checked = item?.wake?.enabled ?? false;
+  fillWakeTarget(item);
   $('#bot-wake-mode').value = item?.wake?.scheduleMode || 'fixed'; $('#bot-wake-interval').value = item?.wake?.intervalMinutes ?? 60;
   $('#bot-wake-random-min').value = item?.wake?.randomMinMinutes ?? 45; $('#bot-wake-random-max').value = item?.wake?.randomMaxMinutes ?? 120;
   $('#bot-wake-quiet-enabled').checked = item?.wake?.quietHoursEnabled ?? false;
@@ -223,7 +224,7 @@ function botBody(app) {
     stickers: { enabled: $('#bot-stickers-enabled').checked,
       packIds: [...$('#bot-sticker-packs').selectedOptions].map((option) => option.value),
       replyProbability: Number($('#bot-sticker-probability').value) },
-    wake: { enabled: $('#bot-wake-enabled').checked, targetChatId: $('#bot-wake-chat').value || null,
+    wake: { enabled: $('#bot-wake-enabled').checked, targetChatId: wakeTarget(channel),
       scheduleMode: $('#bot-wake-mode').value, intervalMinutes: Number($('#bot-wake-interval').value),
       randomMinMinutes: Number($('#bot-wake-random-min').value), randomMaxMinutes: Number($('#bot-wake-random-max').value),
       dailyLimit: Number($('#bot-wake-limit').value),

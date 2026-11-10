@@ -29,7 +29,7 @@ test('an owner link binds a private Telegram chat once and explicitly grants it 
   assert.deepEqual(await pairing.ownerAccess(await getBot(first.id)), { hasOwner: false, allowed: false });
   const claims = await Promise.all([open('private'), open('private')]);
   assert.equal(claims.filter(({ text }) => text.includes('已绑定')).length, 1);
-  assert.deepEqual(await pairing.ownerAccess(await getBot(first.id)), { hasOwner: true, allowed: true });
+  assert.deepEqual(await pairing.ownerAccess(await getBot(first.id)), { hasOwner: true, allowed: true, ownerChatId: '123' });
   const restarted = new PairingService(store, secrets);
   assert.deepEqual(await restarted.ownerAccess(await getBot(second.id)), { hasOwner: true, allowed: false });
   assert.deepEqual(await restarted.startOwnerAccess(second, 'second_bot'), { allowed: true, url: 'https://t.me/second_bot' });

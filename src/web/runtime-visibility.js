@@ -17,7 +17,7 @@ function wakeCard(wake = {}) {
   badge.textContent = wake.enabled ? (wake.configured ? '运行中' : '待完善') : '未启用';
   top.append(title, badge); card.append(top);
   if (!wake.enabled) { card.append(copy('在 Bot 编辑页启用后，这里会显示下一次尝试与最近结果。')); return card; }
-  if (!wake.configured) { card.append(copy('唤醒目标未配置或不在允许名单中。')); return card; }
+  if (!wake.configured) { card.append(copy('请打开「编辑 Bot → 自动唤醒」，选好已授权的接收会话并保存。')); return card; }
   const rows = document.createElement('dl'); rows.className = 'wake-status-rows';
   rows.append(
     pair('调度方式', wake.mode === 'random' ? `随机 ${wake.randomMinMinutes}–${wake.randomMaxMinutes} 分钟` : `每 ${wake.intervalMinutes} 分钟`),

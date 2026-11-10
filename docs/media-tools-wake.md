@@ -121,7 +121,11 @@ Sent, silent, and failed wake runs also enter the per-Bot runtime timeline.
 The timeline stores operational metadata only and never stores chat text.
 
 Wake is off by default and the target must already be in that Bot's allowlist.
-Telegram sends to the configured Chat ID. WeChat sends with the target user's
+For Telegram, bind your private chat from the Bot detail page, then open
+**编辑 Bot → 自动唤醒** and choose **我的 Telegram 私聊**. Turning wake on
+prefills that choice when available. Other paired chats can be selected from
+the same list. Save the Bot to apply the schedule.
+WeChat sends with the target user's
 most recently saved conversation context; that user must have spoken to the Bot
 first. If Tencent rejects an expired context, the run is stored as failed and
 does not consume the successful-send quota.

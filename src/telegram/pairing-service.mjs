@@ -14,7 +14,8 @@ export class PairingService {
 
   async ownerAccess(bot) {
     const ownerId = await this.secretStore.read(OWNER_KEY);
-    return { hasOwner: Boolean(ownerId), allowed: Boolean(ownerId && bot.telegram.allowedChatIds.includes(ownerId)) };
+    const allowed = Boolean(ownerId && bot.telegram.allowedChatIds.includes(ownerId));
+    return { hasOwner: Boolean(ownerId), allowed, ...(allowed ? { ownerChatId: ownerId } : {}) };
   }
 
   async startOwnerAccess(bot, username) {
