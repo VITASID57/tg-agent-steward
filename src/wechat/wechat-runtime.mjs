@@ -6,21 +6,26 @@ const VOICE_ITEM = 3;
 
 export class WechatRuntime {
   constructor({ botId, client, controlPlaneStore, manager, stateFile, pairing, voiceService, imageService,
-    stickerService, eventStore = null, random = Math.random, logger = console }) {
+    stickerService, eventStore = null, onStatus = null, random = Math.random, logger = console }) {
     Object.assign(this, { botId, client, controlPlaneStore, manager, stateFile, pairing, voiceService,
-      imageService, stickerService, eventStore, random, logger });
+      imageService, stickerService, eventStore, onStatus, random, logger });
     this.controller = null;
   }
 
   async start() {
     if (this.controller) return;
     this.controller = new AbortController();
+    await this.client.notifyStart?.();
+    this.onStatus?.({ running: true, lastError: null });
     this.#poll(this.controller.signal).catch((error) => {
       if (!this.controller?.signal.aborted) this.logger.error(`WeChat ${this.botId}: ${safeError(error)}`);
     });
   }
 
-  stop() { this.controller?.abort(); this.controller = null; }
+  stop() {
+    this.controller?.abort(); this.controller = null;
+    this.client.notifyStop?.().catch(() => {});
+  }
 
   async #poll(signal) {
     let failures = 0;
@@ -33,6 +38,14 @@ export class WechatRuntime {
         failures = 0;
       } catch (error) {
         if (signal.aborted || error.name === 'AbortError' || error.name === 'TimeoutError') continue;
+        if (Number(error.code) === -14) {
+          const detail = '微信登录已过期，请重新扫码连接。';
+          this.logger.error(`WeChat polling ${this.botId}: ${detail}`);
+          await this.#save({ syncBuffer: '' });
+          this.onStatus?.({ running: false, lastError: detail });
+          await this.eventStore?.record(this.botId, { kind: 'channel', status: 'error', title: '微信登录已过期', detail });
+          break;
+        }
         failures += 1; this.logger.error(`WeChat polling ${this.botId}: ${safeError(error)}`);
         await this.eventStore?.record(this.botId, { kind: 'channel', status: 'error', title: '微信轮询异常', detail: safeError(error) });
         await delay(failures >= 3 ? 10_000 : 1_500, signal);

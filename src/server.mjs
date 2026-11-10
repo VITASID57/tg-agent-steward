@@ -80,10 +80,10 @@ const telegramService = new TelegramService({
 });
 const wechatStateFile = new JsonFile(join(dataDir, 'wechat-state.json'), { bots: {} });
 const wechatService = new WechatService({
-  controlPlaneStore, secretStore, eventStore,
-  createRuntime: (botId, account) => new WechatRuntime({
+  controlPlaneStore, secretStore, stateFile: wechatStateFile, eventStore,
+  createRuntime: (botId, account, onStatus) => new WechatRuntime({
     botId, client: new WechatClient(account), controlPlaneStore, manager, stateFile: wechatStateFile,
-    pairing, voiceService, imageService, stickerService, eventStore,
+    pairing, voiceService, imageService, stickerService, eventStore, onStatus,
   }),
 });
 const wakeService = new WakeService({ controlPlaneStore,

@@ -10,6 +10,7 @@ function memoryFile(initial = { bots: {} }) {
 test('wechat runtime routes text through the shared conversation manager and preserves sync state', async () => {
   const sent = []; let polls = 0; let context;
   const client = {
+    async notifyStart() {}, async notifyStop() {},
     async getUpdates(_buffer, signal) {
       polls += 1;
       if (polls === 1) return { get_updates_buf: 'next-buffer', msgs: [{
@@ -37,6 +38,21 @@ test('wechat runtime routes text through the shared conversation manager and pre
   } });
   assert.deepEqual(sent, [{ userId: 'user-1', token: 'ctx-1', text: '收到啦' }]);
   assert.equal((await stateFile.read()).bots['wechat-bot'].syncBuffer, 'next-buffer');
+});
+
+test('wechat runtime stops polling and surfaces an expired login', async () => {
+  const statuses = []; let polls = 0;
+  const runtime = new WechatRuntime({ botId: 'wechat-bot', stateFile: memoryFile(),
+    client: {
+      async notifyStart() {}, async notifyStop() {},
+      async getUpdates() { polls += 1; throw Object.assign(new Error('expired'), { code: -14 }); },
+    },
+    controlPlaneStore: { async get() { return { bots: [] }; } }, manager: {},
+    onStatus(value) { statuses.push(value); }, logger: { error() {} },
+  });
+  await runtime.start(); await waitFor(() => statuses.some((item) => item.running === false)); runtime.stop();
+  assert.equal(polls, 1);
+  assert.match(statuses.at(-1).lastError, /重新扫码/u);
 });
 
 test('wechat voice transcript becomes user text and can be switched off', () => {

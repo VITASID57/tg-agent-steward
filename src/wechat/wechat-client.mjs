@@ -4,7 +4,7 @@ import { fileItem, imageItem, uploadWechatMedia } from './wechat-media.mjs';
 
 const DEFAULT_BASE_URL = 'https://ilinkai.weixin.qq.com';
 const DEFAULT_CDN_BASE_URL = 'https://novac2c.cdn.weixin.qq.com/c2c';
-const CHANNEL_VERSION = '0.4.0';
+const CHANNEL_VERSION = '2.4.10';
 const COMMON_HEADERS = Object.freeze({ 'iLink-App-Id': 'bot', 'iLink-App-ClientVersion': '132106' });
 
 export class WechatClient {
@@ -20,6 +20,14 @@ export class WechatClient {
       get_updates_buf: buffer,
       base_info: baseInfo(),
     }, signal, 40_000);
+  }
+
+  notifyStart() {
+    return this.#post('ilink/bot/msg/notifystart', { base_info: baseInfo() }, undefined, 10_000);
+  }
+
+  notifyStop() {
+    return this.#post('ilink/bot/msg/notifystop', { base_info: baseInfo() }, undefined, 10_000);
   }
 
   async sendText(toUserId, contextToken, text, signal) {
@@ -84,7 +92,11 @@ export class WechatClient {
     if (!response.ok) throw new Error(`微信通道请求失败（${response.status}）`);
     const parsed = parseJson(payload);
     if ((parsed.ret && parsed.ret !== 0) || (parsed.errcode && parsed.errcode !== 0)) {
-      throw new Error(`微信通道返回错误：${parsed.errmsg || parsed.ret || parsed.errcode}`);
+      const code = Number(parsed.errcode || parsed.ret);
+      const error = new Error(code === -14 ? '微信登录已过期，请重新扫码连接。'
+        : `微信通道返回错误：${parsed.errmsg || parsed.ret || parsed.errcode}`);
+      error.code = code;
+      throw error;
     }
     return parsed;
   }

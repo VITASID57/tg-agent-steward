@@ -1,12 +1,13 @@
 import { pollWechatQr, requestWechatQr } from './wechat-client.mjs';
 
 export class WechatService {
-  constructor({ controlPlaneStore, secretStore, createRuntime, eventStore = null, fetchImpl = fetch }) {
+  constructor({ controlPlaneStore, secretStore, createRuntime, stateFile = null, eventStore = null, fetchImpl = fetch }) {
     this.controlPlaneStore = controlPlaneStore;
     this.secretStore = secretStore;
     this.createRuntime = createRuntime;
     this.fetch = fetchImpl;
     this.eventStore = eventStore;
+    this.stateFile = stateFile;
     this.runtimes = new Map();
     this.states = new Map();
     this.logins = new Map();
@@ -21,8 +22,13 @@ export class WechatService {
         this.#stop(bot.id); this.states.set(bot.id, status(bot, Boolean(account), false, null)); continue;
       }
       wanted.add(bot.id);
-      if (this.runtimes.has(bot.id)) { this.states.set(bot.id, status(bot, true, true, null)); continue; }
-      const runtime = this.createRuntime(bot.id, account);
+      if (this.runtimes.has(bot.id)) {
+        if (!this.states.get(bot.id)?.lastError) this.states.set(bot.id, status(bot, true, true, null));
+        continue;
+      }
+      const runtime = this.createRuntime(bot.id, account, (patch) => {
+        this.states.set(bot.id, status(bot, true, patch.running, patch.lastError));
+      });
       try {
         await runtime.start(); this.runtimes.set(bot.id, runtime); this.states.set(bot.id, status(bot, true, true, null));
         await this.eventStore?.record(bot.id, { kind: 'channel', status: 'success', title: '微信 Bot 已启动', detail: '消息轮询已连接。' });
@@ -57,6 +63,9 @@ export class WechatService {
     if (result.status === 'expired') this.logins.delete(botId);
     if (result.status !== 'confirmed') return { status: qrStatus(result.status) };
     await this.secretStore.write(`wechat:${botId}`, JSON.stringify(result.account));
+    await this.stateFile?.update((state = { bots: {} }) => ({
+      ...state, bots: { ...(state.bots || {}), [botId]: {} },
+    }));
     if (result.account.userId) {
       const bot = await this.#assertWechatBot(botId);
       await this.controlPlaneStore.upsertBot({ ...bot, wechat: { ...bot.wechat,
