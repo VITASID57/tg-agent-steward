@@ -87,3 +87,96 @@ test('a new session clears the old Claude session after an in-flight reply finis
   assert.equal(engine.calls.at(-1).sessionId, null);
   assert.doesNotMatch(engine.calls.at(-1).prompt, /旧窗最后一句|上一会话交接/u);
 });
+
+test('switching a WeChat Bot uses the old connection to summarize, then starts the new engine with only the summary', async () => {
+  const state = defaultControlPlane();
+  const bot = state.bots[0];
+  bot.channel.type = 'wechat-clawbot';
+  bot.chat.connectionId = 'old';
+  state.connections = [
+    { id: 'old', kind: 'grok-build', options: { runtimeMode: 'chat' } },
+    { id: 'new', kind: 'codex', options: { runtimeMode: 'agent', workingDirectory: '/new-runtime' } },
+  ];
+  const old = new FakeEngine('grok-build');
+  const next = new FakeEngine('codex');
+  const manager = new ConversationManager({
+    controlPlaneStore: { get: async () => structuredClone(state) },
+    stateFile: new MemoryFile({ chats: {} }),
+    engines: { forConnection: async (connection) => connection.id === 'old' ? old : next },
+  });
+  await manager.reply('1', '旧窗第一句', { surface: 'wechat' });
+  bot.chat.connectionId = 'new';
+  await manager.reply('1', '继续', { surface: 'wechat' });
+  const handoff = old.calls.at(-1);
+  assert.equal(handoff.sessionId, 'grok-build-new');
+  assert.equal(handoff.settings.connectionId, 'old');
+  assert.equal(handoff.settings.runtimeMode, 'chat');
+  assert.equal(next.calls[0].sessionId, null);
+  assert.match(next.calls[0].prompt, /旧会话摘要/u);
+  assert.doesNotMatch(next.calls[0].prompt, /旧窗第一句/u);
+});
+
+test('opening a new session can carry the previous summary or discard it, even after changing engines', async () => {
+  let engine = 'grok-build';
+  const old = new FakeEngine(engine);
+  const next = new FakeEngine('codex');
+  const manager = new ConversationManager({
+    settingsStore: { get: async () => ({ engine }) },
+    personaStore: { get: async () => ({ current: { id: 'p1', text: '' } }) },
+    stateFile: new MemoryFile({ chats: {} }),
+    engines: { get: (id) => id === 'grok-build' ? old : next },
+  });
+  const carry = { carrySummary: true };
+  assert.deepEqual(await manager.newSession('1', undefined, carry), { ok: false, reason: 'no-session' });
+  await manager.reply('1', '旧窗原文');
+  await manager.reply('2', '另一个聊天的旧窗');
+  engine = 'codex';
+  await manager.newSession('1', undefined, carry);
+  await manager.newSession('1', undefined, carry);
+  assert.equal(old.calls.length, 3);
+  assert.equal(old.calls.at(-1).sessionId, 'grok-build-new');
+  await manager.newSession('2', undefined, { carrySummary: false });
+  await manager.reply('1', '带摘要的新窗');
+  await manager.reply('2', '不带摘要的新窗');
+  assert.equal(old.calls.length, 3);
+  assert.equal(next.calls[0].sessionId, null);
+  assert.match(next.calls[0].prompt, /旧会话摘要/u);
+  assert.doesNotMatch(next.calls[0].prompt, /旧窗原文/u);
+  assert.equal(next.calls[1].sessionId, null);
+  assert.doesNotMatch(next.calls[1].prompt, /上一会话交接/u);
+});
+
+test('manual summary compaction preserves the old session on failure and serializes the next reply', async () => {
+  const stateFile = new MemoryFile({ chats: {} });
+  const engine = new FakeEngine('grok-build');
+  const started = Promise.withResolvers();
+  const finish = Promise.withResolvers();
+  const original = engine.complete.bind(engine);
+  engine.compact = async () => ({ ok: false, reason: 'handoff-required' });
+  engine.complete = async (input) => {
+    if (input.prompt.includes('交接摘要')) throw new Error('provider unavailable');
+    return original(input);
+  };
+  const manager = new ConversationManager({
+    settingsStore: { get: async () => ({ engine: 'grok-build' }) },
+    personaStore: { get: async () => ({ current: { id: 'p1', text: '' } }) },
+    stateFile, engines: { get: () => engine },
+  });
+  await manager.reply('1', '旧窗');
+  await assert.rejects(manager.newSession('1', undefined, { carrySummary: true }), /旧会话已保留/u);
+  assert.equal((await manager.status('1')).chat.sessionId, 'grok-build-new');
+  await assert.rejects(manager.compact('1'), /旧会话已保留/u);
+  assert.equal((await manager.status('1')).chat.sessionId, 'grok-build-new');
+  engine.complete = async (input) => {
+    if (input.prompt.includes('交接摘要')) { started.resolve(); await finish.promise; }
+    return original(input);
+  };
+  const compacting = manager.compact('1');
+  await started.promise;
+  const next = manager.reply('1', '续聊');
+  finish.resolve();
+  assert.deepEqual(await compacting, { ok: true, mode: 'handoff' });
+  await next;
+  assert.equal(engine.calls.at(-1).sessionId, null);
+  assert.match(engine.calls.at(-1).prompt, /旧会话摘要/u);
+});

@@ -210,7 +210,11 @@ export function createApiHandler(services) {
       const chatId = requiredBodyChatId(body);
       const targetBotId = body.botId ? String(body.botId) : 'bot-default';
       const action = path.slice('/api/session/'.length);
-      if (action === 'new') return json(response, 200, await manager.newSession(chatId, targetBotId), headers);
+      if (action === 'new') {
+        const { carrySummary = false } = body;
+        if (typeof carrySummary !== 'boolean') throw Object.assign(new Error('carrySummary 必须是布尔值'), { statusCode: 400 });
+        return json(response, 200, await manager.newSession(chatId, targetBotId, { carrySummary }), headers);
+      }
       if (action === 'compact') return json(response, 200, await manager.compact(chatId, targetBotId), headers);
       if (action === 'stop') return json(response, 200, await manager.stop(chatId, targetBotId), headers);
     }

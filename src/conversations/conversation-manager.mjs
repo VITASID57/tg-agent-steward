@@ -23,23 +23,38 @@ export class ConversationManager {
     return this.#serial(key, () => this.#reply(chatId, text, context));
   }
 
-  async newSession(chatId, botId = 'bot-default') {
+  async newSession(chatId, botId = 'bot-default', { carrySummary = false } = {}) {
     const key = this.#chatKey(botId, chatId);
-    await this.#serial(key, () => this.#updateChat(key, (chat) => ({ ...chat, sessionId: null, handoff: '', lastError: null })));
-    return { ok: true };
+    return this.#serial(key, async () => {
+      const chat = await this.#getChat(key);
+      let handoff = '';
+      if (carrySummary) {
+        if (chat?.sessionId) {
+          const runtime = await this.#runtime(botId, { allowIncomplete: true });
+          handoff = await summarizeSession(chat, await this.#sessionRuntime(chat, runtime));
+        } else {
+          handoff = chat?.handoff ?? '';
+        }
+        if (!handoff.trim()) return { ok: false, reason: 'no-session' };
+      }
+      await this.#setChat(key, { ...chat, sessionId: null, handoff, lastError: null });
+      return { ok: true };
+    });
   }
 
   async compact(chatId, botId = 'bot-default') {
-    const key = this.#chatKey(botId, chatId); const chat = await this.#getChat(key);
-    if (!chat?.sessionId) return { ok: false, reason: 'no-session' };
-    const runtime = await this.#runtime(botId);
-    const engine = chat.connectionId ? await this.engines.forConnection(runtime.state.connections.find((item) => item.id === chat.connectionId) ?? runtime.connection)
-      : this.engines.get(chat.engine);
-    const result = await engine.compact(chat.sessionId, runtime.settings);
-    if (result.ok) return result;
-    const handoff = await this.#createHandoff(chat, runtime);
-    await this.#updateChat(key, (current) => ({ ...current, sessionId: null, handoff }));
-    return { ok: true, mode: 'handoff' };
+    const key = this.#chatKey(botId, chatId);
+    return this.#serial(key, async () => {
+      const chat = await this.#getChat(key);
+      if (!chat?.sessionId) return { ok: false, reason: 'no-session' };
+      const runtime = await this.#runtime(botId);
+      const prior = await this.#sessionRuntime(chat, runtime);
+      const result = await prior.engine.compact(chat.sessionId, prior.settings);
+      if (result.ok) return result;
+      const handoff = await summarizeSession(chat, prior);
+      await this.#updateChat(key, (current) => ({ ...current, sessionId: null, handoff }));
+      return { ok: true, mode: 'handoff' };
+    });
   }
 
   async stop(chatId, botId = 'bot-default') {
@@ -174,18 +189,19 @@ export class ConversationManager {
 
   async #createHandoff(chat, runtime) {
     if (!chat?.sessionId) return chat?.handoff ?? '';
-    const oldSettings = { ...runtime.settings, engine: chat.engine, model: chat.model ?? '', effort: chat.effort ?? '' };
     try {
-      const oldConnection = runtime.state?.connections.find((item) => item.id === chat.connectionId);
-      const engine = oldConnection ? await this.engines.forConnection(oldConnection) : this.engines.get(chat.engine);
-      const result = await engine.complete({
-        sessionId: chat.sessionId, prompt: HANDOFF_PROMPT, settings: oldSettings,
-        instructions: '你正在整理本会话的交接摘要。不要执行工具。', requestKey: `handoff:${chat.sessionId}`,
-      });
-      return result.text;
+      return await summarizeSession(chat, await this.#sessionRuntime(chat, runtime));
     } catch {
       return '上一会话因切换或配置变更结束。请自然接续用户当前消息；不确定的历史细节先询问或检索，不要编造。';
     }
+  }
+
+  async #sessionRuntime(chat, runtime) {
+    const connection = runtime.state?.connections.find((item) => item.id === chat.connectionId);
+    if (chat.connectionId && !connection) throw new Error('旧会话的连接已移除，无法整理上文。');
+    const engine = connection ? await this.engines.forConnection(connection) : this.engines.get(chat.engine);
+    const settings = connection ? connectionSettings(runtime.bot, connection) : runtime.settings;
+    return { engine, settings: { ...settings, engine: chat.engine, model: chat.model ?? '', effort: chat.effort ?? '' } };
   }
 
   async #getChat(chatId) {
@@ -216,16 +232,7 @@ export class ConversationManager {
     const savedProfile = state.profiles.find((item) => item.id === bot.profileId);
     if ((!connection || !savedProfile) && !allowIncomplete) throw new Error('Bot 的连接或人物档案不完整');
     const profile = savedProfile ?? { id: 'profile-unconfigured', revision: 0, blocks: [] };
-    const options = connection?.options ?? {};
-    const settings = {
-      engine: connection?.kind ?? 'unconfigured', model: bot.chat.model, effort: bot.chat.effort,
-      connectionId: connection?.id ?? null, runtimeMode: options.runtimeMode === 'agent' ? 'agent' : 'chat',
-      workingDirectory: options.workingDirectory ?? '',
-      codex: { sandbox: options.sandbox ?? 'read-only', approvalPolicy: options.approvalPolicy ?? 'never' },
-      claude: { tools: options.tools ?? [], allowedTools: options.allowedTools ?? [], disallowedTools: options.disallowedTools ?? [], mcpConfigPath: options.mcpConfigPath ?? '' },
-      channel: bot.channel?.type ?? 'telegram',
-      telegram: { groupMode: bot.telegram.groupMode, splitParagraphs: bot.telegram.splitParagraphs },
-    };
+    const settings = connectionSettings(bot, connection);
     return { settings, persona: { id: `${profile.id}:${profile.revision}`, text: '' }, profile, connection, state, bot };
   }
 
@@ -241,6 +248,32 @@ export class ConversationManager {
     this.chatQueues.set(key, tracked);
     return tracked;
   }
+}
+
+function connectionSettings(bot, connection) {
+  const options = connection?.options ?? {};
+  return {
+    engine: connection?.kind ?? 'unconfigured', model: bot.chat.model, effort: bot.chat.effort,
+    connectionId: connection?.id ?? null, runtimeMode: options.runtimeMode === 'agent' ? 'agent' : 'chat',
+    workingDirectory: options.workingDirectory ?? '',
+    codex: { sandbox: options.sandbox ?? 'read-only', approvalPolicy: options.approvalPolicy ?? 'never' },
+    claude: { tools: options.tools ?? [], allowedTools: options.allowedTools ?? [], disallowedTools: options.disallowedTools ?? [], mcpConfigPath: options.mcpConfigPath ?? '' },
+    channel: bot.channel?.type ?? 'telegram',
+    telegram: { groupMode: bot.telegram.groupMode, splitParagraphs: bot.telegram.splitParagraphs },
+  };
+}
+
+async function summarizeSession(chat, { engine, settings }) {
+  try {
+    const result = await engine.complete({
+      sessionId: chat.sessionId, prompt: HANDOFF_PROMPT, settings,
+      instructions: '你正在整理本会话的交接摘要。不要执行工具。', requestKey: `handoff:${chat.sessionId}`,
+    });
+    if (result.text?.trim()) return result.text;
+  } catch (error) {
+    throw new Error('未能生成会话摘要，旧会话已保留。', { cause: error });
+  }
+  throw new Error('会话摘要为空，旧会话已保留。');
 }
 
 function toolInstructions(tools) {

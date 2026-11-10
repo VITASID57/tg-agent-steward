@@ -70,6 +70,17 @@
               <div class="button-row"><button type="button" class="primary" id="telegram-access-start">去 Telegram 绑定我</button><a id="telegram-access-link" target="_blank" rel="noopener noreferrer" hidden>打开私聊 ↗</a></div>
             </section>
             <div class="bot-detail-facts" aria-label="当前连接摘要"><div><small>连接预设</small><strong id="bot-detail-connection">—</strong></div><div><small>模型</small><strong id="bot-detail-model">—</strong></div><div><small>人物档案</small><strong id="bot-detail-profile">—</strong></div><div><small>运行方式</small><strong id="bot-detail-mode">—</strong></div></div>
+            <section class="detail-section" aria-labelledby="bot-session-title">
+              <h3 id="bot-session-title">会话</h3>
+              <div id="bot-session-target-field" hidden><label for="bot-session-target">选择会话</label><select id="bot-session-target"></select></div>
+              <div class="button-row"><button type="button" id="bot-session-new" aria-expanded="false" aria-controls="bot-session-new-options">开启新会话</button><button type="button" class="quiet" id="bot-session-compact">压缩会话</button></div>
+              <div id="bot-session-new-options" hidden>
+                <div class="button-row"><button type="button" id="bot-session-new-summary">带摘要</button><button type="button" id="bot-session-new-fresh">不带摘要</button></div>
+                <p class="hint">带摘要会把上一段的要点带到新会话。</p>
+              </div>
+              <p class="hint" id="bot-session-help" hidden></p>
+              <p class="hint" id="bot-session-result" role="status" hidden></p>
+            </section>
             <section class="detail-section" aria-labelledby="bot-feature-title"><div class="section-title"><div><p class="eyebrow">CAPABILITIES</p><h3 id="bot-feature-title">功能设置</h3></div></div><div id="bot-detail-features" class="feature-grid"></div></section>
             <details class="detail-section diagnostic-fold"><summary><span><b id="bot-runtime-title">实际运行信息</b><small>连接、自检、自动唤醒、时间线、工具与用量</small></span></summary><div class="injection-heading"><small>这里不会展示账号密钥或聊天正文。</small><button type="button" id="refresh-bot-diagnostics" class="quiet">刷新运行信息</button></div><div id="bot-diagnostics" class="diagnostic-grid"><p class="hint">正在读取运行信息…</p></div></details>
           </section>

@@ -51,28 +51,12 @@ export class CodexEngine {
     const threadId = sessionId
       ? await this.#resume(client, mode, sessionId, settings, instructions)
       : await this.#startThread(client, mode, settings, instructions);
-    if (requestKey) this.requestThreads.set(requestKey, threadId);
-    const result = this.#waitForTurn(client, threadId, requestKey);
-    try {
-      const response = await client.request('turn/start', {
-        threadId,
-        input: [{ type: 'text', text: prompt, text_elements: [] }],
-        ...(settings.model ? { model: settings.model } : {}),
-        ...(settings.effort ? { effort: settings.effort } : {}),
-      });
-      const state = this.turns.get(threadId);
-      if (state) state.turnId = response.turn?.id ?? null;
-    } catch (error) {
-      const state = this.turns.get(threadId);
-      if (state) {
-        clearTimeout(state.timer);
-        this.turns.delete(threadId);
-        if (state.requestKey) this.requestThreads.delete(state.requestKey);
-        state.reject(error);
-      }
-      throw error;
-    }
-    const completed = await result;
+    const completed = await this.#requestTurn(client, threadId, requestKey, 'turn/start', {
+      threadId,
+      input: [{ type: 'text', text: prompt, text_elements: [] }],
+      ...(settings.model ? { model: settings.model } : {}),
+      ...(settings.effort ? { effort: settings.effort } : {}),
+    });
     const { items, ...message } = completed;
     const cwd = mode === 'chat' ? this.chatWorkdir : settings.workingDirectory;
     const media = await codexTurnImages(items, threadId, client.env, cwd);
@@ -84,8 +68,8 @@ export class CodexEngine {
     const client = this.clients[mode];
     await client.start();
     await this.#resume(client, mode, sessionId, settings, '');
-    await client.request('thread/compact/start', { threadId: sessionId });
-    return { ok: true };
+    await this.#requestTurn(client, sessionId, null, 'thread/compact/start', { threadId: sessionId });
+    return { ok: true, mode: 'native' };
   }
 
   async stop(sessionId, requestKey) {
@@ -135,8 +119,27 @@ export class CodexEngine {
     return threadId;
   }
 
+  async #requestTurn(client, threadId, requestKey, method, params) {
+    const result = this.#waitForTurn(client, threadId, requestKey);
+    const state = this.turns.get(threadId);
+    if (requestKey) this.requestThreads.set(requestKey, threadId);
+    const start = Promise.resolve().then(() => client.request(method, params)).then((response) => {
+      if (this.turns.get(threadId) === state) state.turnId = response?.turn?.id ?? null;
+    }).catch((error) => {
+      if (this.turns.get(threadId) === state) {
+        clearTimeout(state.timer);
+        this.turns.delete(threadId);
+        if (requestKey) this.requestThreads.delete(requestKey);
+        state.reject(error);
+      }
+      throw error;
+    });
+    const [completed] = await Promise.all([result, start]);
+    return completed;
+  }
+
   #waitForTurn(client, threadId, requestKey) {
-    if (this.turns.has(threadId)) throw Object.assign(new Error('这个会话仍在回复中'), { statusCode: 409 });
+    if (this.turns.has(threadId)) throw Object.assign(new Error('这个会话仍在处理中'), { statusCode: 409 });
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.turns.delete(threadId);

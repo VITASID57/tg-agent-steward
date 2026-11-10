@@ -65,8 +65,8 @@ Vertex 使用 API Key 时，常规模型请求展示按用途整理的候选。�
 | Method | Route | Purpose |
 | --- | --- | --- |
 | GET | `/api/session/status?chatId=...` | 查询默认 Bot 的会话映射 |
-| POST | `/api/session/new` | Body `{ "chatId": "..." }` |
-| POST | `/api/session/compact` | 原生压缩或生成交接摘要 |
+| POST | `/api/session/new` | Body `{ "chatId": "...", "botId": "...", "carrySummary": true }`。`carrySummary` 默认为 `false`，设为 `true` 时整理上一段摘要后重开。没有上文时返回 `ok: false`，整理失败时保留当前会话。 |
+| POST | `/api/session/compact` | 同上，等原生压缩结束或保存交接摘要 |
 | POST | `/api/session/stop` | 中断当前生成 |
 
 `/api/status`、`/api/settings` 和旧版人物接口暂时保留，供 v0.1 客户端迁移；新
