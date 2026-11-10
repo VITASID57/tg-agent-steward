@@ -1,5 +1,8 @@
 # TG Agent Steward / TG 管家
 
+
+<img width="1533" height="1270" alt="acb67fd5-7e8c-4ff3-b6fd-80411eb84ce4" src="https://github.com/user-attachments/assets/73bfd3d4-9371-4fc0-af1a-d8ca5ea241f0" />
+
 一个可自托管、可嵌入其他前端的多渠道 AI Bot 控制面。连接凭据集中保存一次，
 多个 Bot 分别选择连接、模型、思考档位、人物、外置记忆、声音、生图与工具预设。
 公开仓库沿用直白名称，控制页的产品名是 **栖光庭 / Lumenkeep**：一处管理
