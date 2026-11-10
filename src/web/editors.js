@@ -94,7 +94,7 @@ function fillConnection(app, itemId) {
 function showConnectionFields() {
   $('#connection-api-format').hidden = $('#connection-kind').value !== 'openai-compatible';
   $('#connection-url-help').textContent = $('#connection-kind').value === 'vertex-ai'
-    ? '填写完整的 Vertex 发布者地址，例如 https://LOCATION-aiplatform.googleapis.com/v1/projects/PROJECT_ID/locations/LOCATION/publishers/google；服务账号邮箱不是服务地址。'
+    ? 'Gemini 4 Argon 请使用 global 发布者地址；密钥放置选 Google x-goog-api-key，并填写同一 Google Cloud 项目创建的 API Key。服务账号邮箱不是地址或密钥，Bearer 只适合仍有效的 OAuth access token。'
     : 'API / MCP 填服务地址；订阅 CLI 与本机命令可以留空。';
   refreshRuntimeExplanation();
 }

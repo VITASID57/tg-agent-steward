@@ -50,7 +50,19 @@ test('Vertex model catalog uses the official regional Model Garden list endpoint
   } });
   const result = await engine.capabilities({ purpose: 'chat' });
   assert.equal(result.source, 'live'); assert.equal(result.models[0].id, 'gemini-2.5-flash');
+  assert.ok(result.models.some((item) => item.id === 'gemini-4-argon'));
   assert.equal(requested, 'https://us-central1-aiplatform.googleapis.com/v1beta1/publishers/google/models?listAllVersions=false');
+});
+
+test('Vertex fallback exposes current Gemini models with valid Argon thinking levels', async () => {
+  const engine = new HttpChatEngine({ connection: { id: 'vertex', kind: 'vertex-ai',
+    baseUrl: 'https://aiplatform.googleapis.com/v1/projects/project-1/locations/global/publishers/google', cachedModels: [], options: {} },
+  secret: 'bad-key', sessions: sessions(), fetchImpl: async () => Response.json({ error: { message: 'bad key' } }, { status: 401 }) });
+  const result = await engine.capabilities({ purpose: 'chat' });
+  const argon = result.models.find((item) => item.id === 'gemini-4-argon');
+  assert.equal(result.source, 'built-in');
+  assert.deepEqual(argon.efforts, ['low', 'medium', 'high']);
+  assert.match(result.liveError, /401/u);
 });
 
 test('ElevenLabs voice catalog is pulled and filtered for text to speech', async () => {

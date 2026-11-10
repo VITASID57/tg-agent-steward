@@ -16,8 +16,10 @@ export class HttpChatEngine {
       models = await this.#liveModels(purpose);
       if (models.length) source = 'live';
     } catch (error) { liveError = error.message; }
+    if (this.connection.kind === 'vertex-ai') models = mergeModels(models, builtInModels(this.connection.kind, purpose));
     if (!models.length) models = this.connection.cachedModels.map((id) => ({ id, name: id }));
     if (!models.length) { models = builtInModels(this.connection.kind, purpose); source = 'built-in'; }
+    else if (this.connection.kind === 'vertex-ai' && source !== 'live') source = 'built-in';
     const efforts = this.connection.kind === 'vertex-ai'
       ? ['minimal', 'low', 'medium', 'high'] : ['low', 'medium', 'high'];
     return { available: true, models: models.map((item) => ({ id: item.id, name: item.name || item.id,
@@ -165,12 +167,22 @@ function builtInModels(kind, purpose) {
     minimax: { tts: ['speech-2.8-hd', 'speech-2.8-turbo'] },
     elevenlabs: { tts: ['eleven_v4', 'eleven_v4_turbo', 'eleven_v3', 'eleven_multilingual_v2', 'eleven_flash_v2_5'], stt: ['scribe_v2'] },
     'vertex-ai': {
-      chat: ['gemini-3.5-pro', 'gemini-3.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash'],
+      chat: [
+        { id: 'gemini-4-argon', name: 'Gemini 4 Argon', efforts: ['low', 'medium', 'high'] },
+        'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash',
+        'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-2.5-pro', 'gemini-2.5-flash',
+      ],
       tts: ['gemini-2.5-flash-tts'], image: ['gemini-2.5-flash-image', 'imagen-4.0-generate-001'],
     },
     novelai: { image: ['nai-diffusion-4-full'] },
   };
-  return (catalogs[kind]?.[purpose] || []).map((id) => ({ id, name: id }));
+  return (catalogs[kind]?.[purpose] || []).map((item) => typeof item === 'string'
+    ? { id: item, name: item } : item);
+}
+
+function mergeModels(primary, fallback) {
+  const seen = new Set();
+  return [...primary, ...fallback].filter((item) => item?.id && !seen.has(item.id) && seen.add(item.id));
 }
 
 async function requestJson(fetchImpl, url, init, signal, timeoutMs = TIMEOUT_MS) {

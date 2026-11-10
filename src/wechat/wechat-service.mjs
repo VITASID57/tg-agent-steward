@@ -57,6 +57,11 @@ export class WechatService {
     if (result.status === 'expired') this.logins.delete(botId);
     if (result.status !== 'confirmed') return { status: qrStatus(result.status) };
     await this.secretStore.write(`wechat:${botId}`, JSON.stringify(result.account));
+    if (result.account.userId) {
+      const bot = await this.#assertWechatBot(botId);
+      await this.controlPlaneStore.upsertBot({ ...bot, wechat: { ...bot.wechat,
+        allowedUserIds: [...new Set([...(bot.wechat?.allowedUserIds || []), String(result.account.userId)])] } });
+    }
     this.logins.delete(botId); this.#stop(botId);
     await this.reconcile();
     return { status: 'connected' };
