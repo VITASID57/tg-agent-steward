@@ -36,10 +36,27 @@ test('ComfyUI route inserts the prompt, polls history, and downloads the output'
 });
 
 test('Vertex image route accepts inline image data', async () => {
-  const result = await generateImageRoute({ connection: { kind: 'vertex-ai', baseUrl: 'https://vertex.test', options: { authStyle: 'api-key' } },
+  const result = await generateImageRoute({ connection: { kind: 'vertex-ai', baseUrl: 'https://vertex.test/v1/publishers/google/models' },
     route: { model: 'image-model' }, prompt: 'garden', secret: 'key',
-    fetchImpl: async (_url, init) => { assert.equal(init.headers['x-goog-api-key'], 'key'); return Response.json({ candidates: [{ content: { parts: [{ inlineData: { mimeType: 'image/png', data: png.toString('base64') } }] } }] }); } });
+    fetchImpl: async (url, init) => {
+      assert.equal(url, 'https://vertex.test/v1/publishers/google/models/image-model:generateContent');
+      assert.equal(init.headers['x-goog-api-key'], 'key');
+      return Response.json({ candidates: [{ content: { parts: [{ inlineData: { mimeType: 'image/png', data: png.toString('base64') } }] } }] });
+    } });
   assert.equal(result.mime, 'image/png');
+});
+
+test('Vertex Imagen uses predict even when the saved endpoint points at Gemini chat', async () => {
+  const result = await generateImageRoute({ connection: { kind: 'vertex-ai',
+    baseUrl: 'https://vertex.test/v1/publishers/google/models/gemini:generateContent', options: { authStyle: 'bearer' } },
+  route: { model: 'imagen-4.0-generate-001' }, prompt: 'garden', secret: 'oauth',
+  fetchImpl: async (url, init) => {
+    assert.equal(url, 'https://vertex.test/v1/publishers/google/models/imagen-4.0-generate-001:predict');
+    assert.equal(init.headers.Authorization, 'Bearer oauth');
+    assert.deepEqual(JSON.parse(init.body), { instances: [{ prompt: 'garden' }], parameters: { sampleCount: 1 } });
+    return Response.json({ predictions: [{ bytesBase64Encoded: png.toString('base64'), mimeType: 'image/png' }] });
+  } });
+  assert.deepEqual(result.image, png);
 });
 
 test('NovelAI route extracts an image from a ZIP response', async () => {
@@ -58,7 +75,12 @@ test('Codex subscription images are collected from CODEX_HOME generated_images',
     await mkdir(join(root, 'generated_images', 'thread'), { recursive: true });
     await writeFile(output, Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.from([9])]));
     const result = await generateImageRoute({ connection: { kind: 'codex', options: {} }, route: {}, prompt: 'gentian',
-      runImpl: async () => { await writeFile(output, png); } });
+      runImpl: async () => {
+        await writeFile(output, png);
+        await mkdir(join(root, 'generated_images', 'other-thread'));
+        await writeFile(join(root, 'generated_images', 'other-thread', 'private.png'), Buffer.from('not this turn'));
+        return { stdoutStart: '{"type":"thread.started","thread_id":"thread"}\n' };
+      } });
     assert.deepEqual(result.image, png); assert.equal(result.mime, 'image/png');
   } finally {
     if (previous === undefined) delete process.env.CODEX_HOME; else process.env.CODEX_HOME = previous;

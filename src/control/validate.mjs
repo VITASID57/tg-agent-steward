@@ -41,6 +41,9 @@ export function normalizeControlPlane(input, legacy = {}) {
     if (!imageIds.has(bot.image.imageProfileId)) bot.image.imageProfileId = null;
     if (!connectionIds.has(bot.voice.transcriptionConnectionId)) bot.voice.transcriptionConnectionId = null;
     bot.tools.connectionIds = bot.tools.connectionIds.filter((id) => connectionIds.has(id));
+    for (const id of Object.keys(bot.tools.disabledByConnection)) {
+      if (!bot.tools.connectionIds.includes(id)) delete bot.tools.disabledByConnection[id];
+    }
     bot.stickers.packIds = bot.stickers.packIds.filter((id) => stickerPackIds.has(id));
     if (!connectionIds.has(bot.memoryConnectionId)) bot.memoryConnectionId = null;
   }
@@ -138,11 +141,15 @@ export function normalizeBot(input) {
       enabled: voice.enabled === true, replyProbability: rangedInt(voice.replyProbability, 0, 0, 100),
       voiceProfileId: optional(voice.voiceProfileId, 160), transcriptionConnectionId: optional(voice.transcriptionConnectionId, 160),
       sendTextWithVoice: voice.sendTextWithVoice !== false,
+      telegramSendTextWithVoice: voice.telegramSendTextWithVoice === true,
     },
     image: { enabled: image.enabled === true, imageProfileId: optional(image.imageProfileId, 160) },
     tools: {
       enabled: tools.enabled === true, connectionIds: stringList(tools.connectionIds, 20),
       allowedToolNames: stringList(tools.allowedToolNames, 200), allowWrites: tools.allowWrites === true,
+      disabledByConnection: Object.fromEntries(Object.entries(object(tools.disabledByConnection))
+        .filter(([id]) => array(tools.connectionIds).includes(id))
+        .map(([id, names]) => [id, stringList(names, Infinity)])),
       maxCalls: rangedInt(tools.maxCalls, 2, 1, 8),
     },
     stickers: { enabled: stickers.enabled === true, packIds: stringList(stickers.packIds, 50),

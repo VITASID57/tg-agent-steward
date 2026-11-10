@@ -1,3 +1,5 @@
+import { codexTurnImages } from './turn-images.mjs';
+
 const TURN_TIMEOUT_MS = 20 * 60_000;
 
 export class CodexEngine {
@@ -14,6 +16,7 @@ export class CodexEngine {
     this.requestThreads = new Map();
     for (const client of new Set(Object.values(this.clients))) {
       client.on('item/agentMessage/delta', (event) => this.#onDelta(event));
+      client.on('item/completed', (event) => this.#onItem(event));
       client.on('turn/completed', (event) => this.#onCompleted(event));
       client.on('thread/tokenUsage/updated', (event) => this.usageByThread.set(event.threadId, event.tokenUsage));
       client.on('closed', (error) => this.#failClient(client, error));
@@ -70,7 +73,10 @@ export class CodexEngine {
       throw error;
     }
     const completed = await result;
-    return { ...completed, sessionId: threadId, usage: this.usageByThread.get(threadId) ?? null };
+    const { items, ...message } = completed;
+    const cwd = mode === 'chat' ? this.chatWorkdir : settings.workingDirectory;
+    const media = await codexTurnImages(items, threadId, client.env, cwd);
+    return { ...message, ...media, sessionId: threadId, usage: this.usageByThread.get(threadId) ?? null };
   }
 
   async compact(sessionId, settings = {}) {
@@ -137,7 +143,7 @@ export class CodexEngine {
         if (requestKey) this.requestThreads.delete(requestKey);
         reject(new Error('Codex 回复超时'));
       }, TURN_TIMEOUT_MS);
-      this.turns.set(threadId, { text: '', turnId: null, resolve, reject, timer, client, requestKey });
+      this.turns.set(threadId, { text: '', items: new Map(), turnId: null, resolve, reject, timer, client, requestKey });
     });
   }
 
@@ -146,13 +152,21 @@ export class CodexEngine {
     if (state) state.text += event.delta ?? '';
   }
 
+  #onItem(event) {
+    const state = this.turns.get(event.threadId);
+    if (state && (!state.turnId || state.turnId === event.turnId)) addImageItem(state, event.item);
+  }
+
   #onCompleted(event) {
     const state = this.turns.get(event.threadId);
     if (!state) return;
     clearTimeout(state.timer);
     this.turns.delete(event.threadId);
     if (state.requestKey) this.requestThreads.delete(state.requestKey);
-    if (event.turn?.status === 'completed') state.resolve({ text: state.text.trim(), turnId: event.turn.id });
+    if (event.turn?.status === 'completed') {
+      for (const item of event.turn.items || []) addImageItem(state, item);
+      state.resolve({ text: state.text.trim(), items: [...state.items.values()], turnId: event.turn.id });
+    }
     else state.reject(new Error(event.turn?.error?.message ?? `Codex turn ${event.turn?.status ?? 'failed'}`));
   }
 
@@ -165,5 +179,13 @@ export class CodexEngine {
       state.reject(error);
       this.turns.delete(threadId);
     }
+  }
+}
+
+function addImageItem(state, item) {
+  if (item?.type === 'imageGeneration' || item?.type === 'mcpToolCall') {
+    const previous = state.items.get(item.id);
+    state.items.set(item.id, previous ? { ...previous, ...item, result: item.result || previous.result,
+      savedPath: item.savedPath || previous.savedPath } : item);
   }
 }

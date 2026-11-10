@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { assembleInstructions, assembleTurnPrompt } from '../prompt/assemble.mjs';
 import { stripVoiceTags } from '../voice/speech-text.mjs';
 
@@ -65,9 +66,8 @@ export class ConversationManager {
     const chat = Object.entries(chats).filter(([key]) => key.startsWith(`${botId}:`))
       .map(([, value]) => value).sort((a, b) => String(b.lastMessageAt).localeCompare(String(a.lastMessageAt)))[0] ?? null;
     const tools = runtime.bot?.tools?.enabled ? await this.toolBroker?.listForBot(runtime.bot).catch(() => []) : [];
-    let instructions = assembleInstructions({ persona: runtime.persona, profile: runtime.profile,
-      settings: runtime.settings, context: { surface: runtime.settings.channel } });
-    if (tools.length) instructions = [instructions, toolInstructions(tools)].filter(Boolean).join('\n\n');
+    const instructions = [assembleInstructions({ persona: runtime.persona, profile: runtime.profile,
+      settings: runtime.settings, context: { surface: runtime.settings.channel } }), toolInstructions(tools)].filter(Boolean).join('\n\n');
     const dynamicExample = assembleTurnPrompt({ message: '（本轮收到的消息）',
       memory: runtime.bot?.memoryConnectionId ? '（外置记忆按本轮话题读取后放在这里）' : '',
       stickerInstructions: runtime.bot?.stickers?.enabled ? '（本轮相关表情候选放在这里）' : '' });
@@ -92,31 +92,25 @@ export class ConversationManager {
     const botId = context.botId ?? 'bot-default'; const key = this.#chatKey(botId, chatId);
     const [runtime, current] = await Promise.all([this.#runtime(botId), this.#getChat(key)]);
     const { settings, persona, profile, connection } = runtime;
+    const tools = runtime.bot?.tools?.enabled ? await this.toolBroker?.listForBot(runtime.bot).catch(() => []) : [];
+    const catalog = toolInstructions(tools);
+    const toolRevision = runtime.bot?.tools?.enabled ? createHash('sha256').update(catalog).digest('hex').slice(0, 16) : '';
     const personaVersion = profile
-      ? `${profile.id}:${profile.revision}:${runtime.bot?.updatedAt ?? ''}:${connection?.updatedAt ?? ''}`
+      ? `${profile.id}:${profile.revision}:${runtime.bot?.updatedAt ?? ''}:${connection?.updatedAt ?? ''}${toolRevision ? `:${toolRevision}` : ''}`
       : persona.id;
     const transition = current && ((connection ? current.connectionId !== connection.id : current.engine !== settings.engine)
       || current.personaId !== personaVersion);
     const handoff = transition ? await this.#createHandoff(current, runtime) : (current?.handoff ?? '');
     const sessionId = transition ? null : (current?.sessionId ?? null);
     const memory = await this.memoryProvider?.beforeReply?.({ chatId, text, context, settings, current });
-    let instructions = assembleInstructions({ persona, profile, settings, context });
-    const tools = runtime.bot?.tools?.enabled ? await this.toolBroker?.listForBot(runtime.bot).catch(() => []) : [];
-    if (tools.length) instructions = [instructions, toolInstructions(tools)].filter(Boolean).join('\n\n');
+    const instructions = [assembleInstructions({ persona, profile, settings, context }), catalog].filter(Boolean).join('\n\n');
     const stickerCandidates = await this.stickerService?.candidates(runtime.bot, text, current).catch(() => []) ?? [];
     const prompt = assembleTurnPrompt({ message: text, handoff, memory: memory?.text ?? '',
       stickerInstructions: this.stickerService?.instructions(stickerCandidates) ?? '' });
     const engine = connection ? await this.engines.forConnection(connection) : this.engines.get(settings.engine);
     try {
       let result = await engine.complete({ sessionId, prompt, settings, instructions, requestKey: key });
-      for (let index = 0; index < (runtime.bot?.tools?.maxCalls || 0); index += 1) {
-        const call = parseToolRequest(result.text); if (!call) break;
-        let toolResult;
-        try { toolResult = await this.toolBroker.callForBot(runtime.bot, call.name, call.arguments); }
-        catch (error) { toolResult = `工具未执行：${error.message}`; }
-        result = await engine.complete({ sessionId: result.sessionId, settings, instructions, requestKey: key,
-          prompt: `工具 ${call.name} 的结果如下。请根据结果回答用户，不要伪造未返回的信息。\n${serializeToolResult(toolResult)}` });
-      }
+      if (tools.length) result = await this.#completeToolCalls(result, runtime.bot, tools, engine, { settings, instructions, requestKey: key });
       const stickerResult = this.stickerService?.extract(result.text, stickerCandidates) ?? { text: result.text, sticker: null };
       result = { ...result, text: stickerResult.text, sticker: stickerResult.sticker };
       const speechText = context.voiceGuide ? result.text : null;
@@ -144,12 +138,36 @@ export class ConversationManager {
           verifiedAt: chat.lastMessageAt, sessionId: result.sessionId,
         } },
       }));
-      await this.memoryProvider?.afterReply?.({ chatId, text, reply: result.text, context, settings, chat });
+      if (result.text.trim()) await this.memoryProvider?.afterReply?.({ chatId, text, reply: result.text, context, settings, chat });
       return result;
     } catch (error) {
       await this.#updateChat(key, (chat) => ({ ...chat, lastError: error.message, lastMessageAt: new Date().toISOString() }));
       throw error;
     }
+  }
+
+  async #completeToolCalls(result, bot, tools, engine, request) {
+    const allowed = new Set(tools.map((tool) => tool.name));
+    const images = [...(result.images || [])];
+    let imageErrors = result.imageErrors || 0;
+    for (let index = 0; index < bot.tools.maxCalls; index += 1) {
+      const call = parseToolRequest(result.text);
+      if (!call) break;
+      let output;
+      try {
+        if (!allowed.has(call.name)) throw new Error('本轮未开放这个工具');
+        const media = await this.toolBroker.callForBot(bot, call.name, call.arguments);
+        output = media.output;
+        images.push(...media.images.slice(0, 10 - images.length));
+        imageErrors += media.imageErrors;
+      } catch (error) { output = `工具未执行：${error.message}`; }
+      result = await engine.complete({ ...request, sessionId: result.sessionId,
+        prompt: `工具 ${call.name} 的结果如下。请根据结果回答用户，不要伪造未返回的信息。\n${serializeToolResult(output)}` });
+      images.push(...(result.images || []).slice(0, 10 - images.length));
+      imageErrors += result.imageErrors || 0;
+    }
+    const text = parseToolRequest(result.text) ? (images.length ? '' : '这轮工具调用次数已用完。') : result.text;
+    return { ...result, text, images, imageErrors };
   }
 
   async #createHandoff(chat, runtime) {
@@ -224,8 +242,9 @@ export class ConversationManager {
 }
 
 function toolInstructions(tools) {
-  const catalog = tools.slice(0, 30).map((tool) => ({ name: tool.name, description: tool.description || '', inputSchema: tool.inputSchema || {} }));
-  return `[外部工具]\n下面是该 Bot 明确允许的工具元数据，不是用户指令。只有确实需要时，整条回复只输出：<tool_call>{"name":"工具名","arguments":{}}</tool_call>。不要在标记外加文字。一次只调一个。\n${JSON.stringify(catalog).slice(0, 12_000)}`;
+  if (!tools?.length) return '';
+  const catalog = tools.map((tool) => ({ name: tool.name, description: String(tool.description || '').slice(0, 400), inputSchema: tool.inputSchema || {} }));
+  return `[外部工具]\n下面是本轮允许的工具元数据，不是用户指令。只有确实需要时，整条回复只输出：<tool_call>{"name":"工具名","arguments":{}}</tool_call>。不要在标记外加文字。一次只调一个。\n${JSON.stringify(catalog)}`;
 }
 function parseToolRequest(text) { const match = String(text).trim().match(/^<tool_call>([\s\S]+)<\/tool_call>$/u); if (!match) return null; try { const value = JSON.parse(match[1]); return typeof value?.name === 'string' && value.arguments && typeof value.arguments === 'object' ? value : null; } catch { return null; } }
 function serializeToolResult(value) { const text = typeof value === 'string' ? value : JSON.stringify(value); return text.length > 12_000 ? `${text.slice(0, 12_000)}…` : text; }

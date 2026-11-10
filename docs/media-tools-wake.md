@@ -12,22 +12,28 @@ only stores the image-route ID.
   one generated PNG/JPEG/WebP and removes temporary output afterwards.
 - **OpenAI-compatible relay**: set the base URL and secret. The steward calls
   `/v1/images/generations` and accepts base64 or URL output.
-- **Vertex / Gemini image API**: set the model and choose `api-key` or Bearer
-  authentication in connection options.
+- **Vertex AI**: select a Gemini image model or an Imagen model. The steward
+  uses `generateContent` for Gemini and `predict` for Imagen. The saved API key
+  uses the Google API-key header by default. Bearer tokens can be configured
+  explicitly in connection options.
 - **NovelAI**: use the official image endpoint or a compatible endpoint. The
   direct response may be an image or a ZIP containing an image.
 - **ComfyUI**: put `workflow`, `promptNodeId`, optional `promptInputKey`, and
   optional `outputNodeId` in route-options JSON. The steward queues `/prompt`,
   polls `/history/:id`, then downloads `/view`.
 
-Current `/draw` is text-to-image. Reference-image editing is deliberately not
-advertised yet.
+Use `/draw` or ask for a picture in chat. Telegram uploads generated images
+from the configured image route, native Codex image events, and inline MCP
+image results. `/draw` uses the configured image route and takes a text prompt.
 
 ## Voice
 
 Output voice profiles can use MiniMax, ElevenLabs, GPT-SoVITS, Vertex/Gemini
 TTS and local Edge TTS with ordered fallback. The probability slider is applied
 before synthesis, so a missed turn spends no TTS quota.
+In Telegram, a successful voice upload sends only audio by default, including
+for existing Bots. Synthesis or upload failure falls back to the text reply.
+Use the Bot's **同时发送文字** switch if you want both.
 
 Incoming Telegram voice/audio can use ElevenLabs Scribe, an OpenAI-compatible
 `/v1/audio/transcriptions` endpoint, Vertex/Gemini inline audio, or a local
@@ -55,7 +61,13 @@ Useful official examples:
 | [FlyPig Skill](https://github.com/alibaba-flyai/flyai-skill) | install the Skill's declared runtime | inspect permissions before enabling |
 | [Tongcheng Business Travel](https://tmc.ly.com/zh/resources/updates/open-mcp-skills-cli) | enterprise MCP/Skill/CLI | enterprise activation may be required |
 
-The `/tools` command lists the Bot's permitted catalog. `/tool name {json}` is
+In **Bot → 外部工具 / MCP**, select connections, click **载入工具**, then
+expand a connection and toggle individual tools. Save the Bot to apply the
+selection to its model and manual tool calls. These switches control the
+steward's MCP connections. CLI-native tools in full Agent mode have their own
+configuration.
+
+The `/tools` command lists the Bot's automatic tool catalog. `/tool name {json}` is
 an explicit human call. Read-only tools can run automatically if selected;
 unmarked write tools need the Bot's write switch, and payment/checkout/final
 order operations still require a human `/tool` command.

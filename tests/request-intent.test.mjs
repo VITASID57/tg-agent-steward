@@ -6,6 +6,8 @@ test('direct natural-language image requests are routed without treating status 
   assert.equal(imageRequestPrompt('老公给我画张图，随便画啥'), '老公给我画张图，随便画啥');
   assert.equal(imageRequestPrompt('测试画画 随便画啥✌️'), '测试画画 随便画啥✌️');
   assert.equal(imageRequestPrompt('/draw 蓝色龙胆花'), '蓝色龙胆花');
+  assert.equal(imageRequestPrompt('那老公再画个画看看'), '那老公再画个画看看');
+  assert.equal(imageRequestPrompt('好啦～老公画一张有树的图。'), '好啦～老公画一张有树的图。');
   assert.equal(imageRequestPrompt('为什么生图功能没有工作？'), null);
   assert.equal(imageRequestPrompt('没看到图'), null);
 });

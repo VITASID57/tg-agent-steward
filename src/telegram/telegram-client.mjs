@@ -28,6 +28,7 @@ export class TelegramClient {
   sendVoice(chatId, audio, filename = 'voice.mp3') { return this.#upload('sendVoice', chatId, 'voice', audio, filename); }
   sendAudio(chatId, audio, filename = 'audio.wav') { return this.#upload('sendAudio', chatId, 'audio', audio, filename); }
   sendPhoto(chatId, image, filename = 'image.png', caption = '') { return this.#upload('sendPhoto', chatId, 'photo', image, filename, caption); }
+  sendDocument(chatId, image, filename, caption = '') { return this.#upload('sendDocument', chatId, 'document', image, filename, caption); }
 
   async #upload(method, chatId, field, audio, filename, caption = '') {
     const form = new FormData(); form.set('chat_id', String(chatId));

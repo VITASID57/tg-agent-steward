@@ -3,8 +3,8 @@ import { homedir, tmpdir } from 'node:os';
 import { extname, join } from 'node:path';
 import { runProcess } from './process-runner.mjs';
 import { firstImageFromZip } from './zip-image.mjs';
+import { imagePayload as checked } from '../media/image-payload.mjs';
 
-const MAX_IMAGE = 25 * 1024 * 1024;
 const subscriptionQueues = new Map();
 
 export class ImageService {
@@ -55,17 +55,28 @@ async function openAiImage({ connection, route, prompt, secret, signal, fetchImp
 }
 
 async function vertexImage({ connection, route, prompt, secret, signal, fetchImpl }) {
-  const model = route.model || 'gemini-2.5-flash-image';
-  const url = connection.baseUrl.includes(':generateContent') ? connection.baseUrl : endpoint(connection.baseUrl, `/models/${model}:generateContent`);
-  const response = await timedFetch(fetchImpl, url, { method: 'POST', signal,
-    headers: { 'Content-Type': 'application/json', ...authHeaders(secret, connection.options) },
-    body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { responseModalities: ['TEXT', 'IMAGE'], ...(route.options || {}) } }),
-  });
+  const url = new URL(connection.baseUrl);
+  const model = route.model || url.pathname.match(/\/models\/([^/:]+)(?::[^/]+)?$/u)?.[1] || 'gemini-2.5-flash-image';
+  const imagen = /^imagen-/iu.test(model);
+  const method = imagen ? 'predict' : 'generateContent';
+  const publisher = url.pathname.replace(/\/models(?:\/[^/]+)?\/?$/u, '').replace(/\/+$/u, '');
+  url.pathname = `${publisher}/models/${encodeURIComponent(model)}:${method}`;
+  const options = connection.options || {};
+  const authStyle = options.authStyle || options.authType || 'api-key';
+  if (authStyle === 'query' && secret) url.searchParams.set(options.authName || 'key', secret);
+  const body = imagen
+    ? { instances: [{ prompt }], parameters: { sampleCount: 1, ...route.options } }
+    : { contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: { responseModalities: ['TEXT', 'IMAGE'], ...route.options } };
+  const response = await timedFetch(fetchImpl, url.href, { method: 'POST', signal,
+    headers: { 'Content-Type': 'application/json', ...authHeaders(authStyle === 'query' ? '' : secret, { ...options, authStyle }) },
+    body: JSON.stringify(body) });
   const data = await response.json().catch(() => null); assertResponse(response, data);
-  const inline = data?.candidates?.[0]?.content?.parts?.find((part) => part?.inlineData?.data)?.inlineData;
-  if (!inline?.data) throw new Error('Vertex 没有返回图片');
-  return checked(Buffer.from(inline.data, 'base64'), inline.mimeType);
+  const inline = imagen ? data?.predictions?.find((item) => item?.bytesBase64Encoded)
+    : data?.candidates?.flatMap((candidate) => candidate.content?.parts || []).find((part) => part?.inlineData?.data)?.inlineData;
+  const bytes = imagen ? inline?.bytesBase64Encoded : inline?.data;
+  if (!bytes) throw new Error('Vertex 没有返回图片');
+  return checked(Buffer.from(bytes, 'base64'), inline.mimeType);
 }
 
 async function novelAiImage({ connection, route, prompt, secret, signal, fetchImpl }) {
@@ -111,14 +122,14 @@ async function subscriptionImage({ connection, prompt, signal, runImpl }) {
     const env = stripApiCredentials(process.env); const command = connection.options?.command || (connection.kind === 'codex' ? 'codex' : 'grok');
     const generatedRoot = connection.kind === 'codex'
       ? join(process.env.CODEX_HOME || join(homedir(), '.codex'), 'generated_images') : '';
-    const before = generatedRoot ? await imageSnapshot(generatedRoot) : new Map();
     const instruction = `Generate exactly one image for this prompt: ${prompt}\nSave the final PNG or JPEG in the current working directory.`;
     const args = connection.kind === 'codex'
-      ? ['exec', '-s', 'workspace-write', '-C', folder, '--skip-git-repo-check', '--ephemeral', `$imagegen ${instruction}`]
+      ? ['exec', '--json', '-s', 'workspace-write', '-C', folder, '--skip-git-repo-check', '--ephemeral', `$imagegen ${instruction}`]
       : ['--cwd', folder, '-p', `Use Grok Imagine. ${instruction}`];
     const processResult = await runImpl(command, args, { cwd: folder, env, signal, timeoutMs: Number(connection.options?.timeoutMs) || 240_000 });
     const localFiles = await findImages(folder);
-    const generatedFiles = generatedRoot ? await changedImages(generatedRoot, before) : [];
+    const threadId = generatedRoot ? codexThreadId(processResult?.stdoutStart || processResult?.stdout) : '';
+    const generatedFiles = threadId ? await findImages(join(generatedRoot, threadId)) : [];
     const file = await newestImage([...localFiles, ...generatedFiles]);
     if (!file) throw subscriptionOutputError(connection.kind, processResult);
     return checked(await readFile(file));
@@ -143,15 +154,14 @@ async function newestImage(files) {
   const dated = await Promise.all(files.map(async (file) => ({ file, mtime: (await stat(file)).mtimeMs })));
   return dated.sort((a, b) => b.mtime - a.mtime)[0]?.file || '';
 }
-async function imageSnapshot(folder) {
-  const files = await findImages(folder); const entries = await Promise.all(files.map(async (file) => {
-    const info = await stat(file); return [file, `${info.mtimeMs}:${info.size}`];
-  }));
-  return new Map(entries);
-}
-async function changedImages(folder, before) {
-  const after = await imageSnapshot(folder);
-  return [...after].filter(([file, signature]) => before.get(file) !== signature).map(([file]) => file);
+function codexThreadId(output = '') {
+  for (const line of output.split(/\r?\n/u)) {
+    try {
+      const item = JSON.parse(line);
+      if (item?.type === 'thread.started' && typeof item.thread_id === 'string' && /^[\w-]+$/u.test(item.thread_id)) return item.thread_id;
+    } catch { /* Ignore non-event CLI output. */ }
+  }
+  return '';
 }
 function serializeSubscription(key, work) {
   const previous = subscriptionQueues.get(key) || Promise.resolve();
@@ -165,8 +175,6 @@ function jsonHeaders(secret, options = {}) { return { 'Content-Type': 'applicati
 function authHeaders(secret, options = {}) { if (!secret) return {}; const style = options.authStyle || options.authType || 'bearer'; if (style === 'api-key') return { 'x-goog-api-key': secret }; if (style === 'header') return { [options.authName || 'X-API-Key']: secret }; return { Authorization: `Bearer ${secret}` }; }
 function assertResponse(response, data) { if (!response.ok) throw new Error(response.status === 401 || response.status === 403 ? '凭据未被接受' : (data?.error?.message || `HTTP ${response.status}`)); }
 async function downloadImage(fetchImpl, url, signal) { const response = await timedFetch(fetchImpl, url, { signal }); if (!response.ok) throw new Error(`图片下载失败：HTTP ${response.status}`); return checked(Buffer.from(await response.arrayBuffer()), response.headers.get('content-type')); }
-function checked(image, hintedMime = '') { if (!image.length) throw new Error('返回了空图片'); if (image.length > MAX_IMAGE) throw new Error('返回图片超过 25 MB'); const mime = detectMime(image, hintedMime); if (!mime) throw new Error('返回内容不是可识别的图片'); return { image, mime, extension: mime === 'image/jpeg' ? 'jpg' : mime.split('/')[1] }; }
-function detectMime(buffer, hinted = '') { if (buffer.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'))) return 'image/png'; if (buffer[0] === 0xff && buffer[1] === 0xd8) return 'image/jpeg'; if (buffer.subarray(0, 4).toString() === 'RIFF' && buffer.subarray(8, 12).toString() === 'WEBP') return 'image/webp'; return /^image\/(?:png|jpeg|webp)$/u.test(hinted) ? hinted : ''; }
 function endpoint(base, suffix) { const value = String(base || '').replace(/\/+$/u, ''); return value.endsWith(suffix) ? value : `${value}${suffix}`; }
 function wait(ms, signal) { return new Promise((resolve, reject) => { const timer = setTimeout(resolve, ms); signal?.addEventListener('abort', () => { clearTimeout(timer); reject(new Error('生图已停止')); }, { once: true }); }); }
 async function timedFetch(fetchImpl, url, init, timeoutMs = 60_000) { if (!url) throw new Error('连接地址为空'); const controller = new AbortController(); const stop = () => controller.abort(); init.signal?.addEventListener('abort', stop, { once: true }); const timer = setTimeout(stop, timeoutMs); try { return await fetchImpl(url, { ...init, signal: controller.signal }); } catch (error) { if (controller.signal.aborted) throw new Error(init.signal?.aborted ? '生图已停止' : '生图连接超时'); throw error; } finally { clearTimeout(timer); init.signal?.removeEventListener('abort', stop); } }

@@ -127,9 +127,11 @@ export class WechatRuntime {
         surface: 'wechat', botId: this.botId, group: false, voiceGuide, ...context,
       });
       if (context.wake && result.text.trim() === '[[SILENT]]') return { sent: false, reason: 'silent' };
+      for (const image of result.images || []) await this.client.sendImage(senderId, contextToken, image.image, signal);
+      if (result.imageErrors) await this.client.sendText(senderId, contextToken, '有图片没能发送，请稍后再试。', signal);
       let voice = null; let voiceError = null;
       const explicitVoice = !context.wake && isExplicitVoiceRequest(text);
-      if (bot.voice?.enabled && bot.voice.voiceProfileId && (explicitVoice || shouldSendVoice(bot.voice, this.random))) {
+      if ((result.speechText || result.text)?.trim() && bot.voice?.enabled && bot.voice.voiceProfileId && (explicitVoice || shouldSendVoice(bot.voice, this.random))) {
         voice = await this.voiceService.synthesize(bot.voice.voiceProfileId, result.speechText || result.text, signal)
           .catch((error) => { voiceError = error; this.logger.error(`WeChat voice ${this.botId}: ${safeError(error)}`); return null; });
       }
@@ -148,7 +150,8 @@ export class WechatRuntime {
         stickerSent = true;
       }
       if (!context.wake) await this.eventStore?.record(this.botId, { kind: 'reply', status: 'success', title: '消息回复已发送',
-        detail: [voice ? '语音' : '', stickerSent ? '表情' : '', (!voice || bot.voice.sendTextWithVoice) ? '文字' : ''].filter(Boolean).join(' + ') || '回复已完成' });
+        detail: [voice ? '语音' : '', stickerSent ? '表情' : '', result.images?.length ? '图片' : '',
+          result.text && (!voice || bot.voice.sendTextWithVoice) ? '文字' : ''].filter(Boolean).join(' + ') || '回复已完成' });
       return { sent: true, voice: Boolean(voice), sticker: stickerSent };
     } finally { await this.client.stopTyping(senderId, ticket, signal).catch(() => {}); }
   }

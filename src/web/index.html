@@ -91,7 +91,7 @@
           <div class="form-grid two"><div><label for="bot-model">模型</label><div class="model-picker-inline"><select id="bot-model" aria-describedby="bot-model-status"><option value="">选择连接后拉取</option></select><button type="button" id="bot-model-refresh" class="quiet">拉取模型</button></div><p class="hint" id="bot-model-status">选择连接后会自动读取模型目录。</p></div><div><label for="bot-effort">思考强度</label><select id="bot-effort"><option value="">后端默认</option></select></div></div>
           </div></details>
           <details class="bot-section" data-bot-section="voice"><summary><span>语音与听写</span><small data-section-status="voice"></small></summary><div class="bot-section-body">
-          <div class="switch-grid"><label class="switch"><input id="bot-voice-enabled" type="checkbox"><span></span><b>允许语音回复</b><small>Telegram 发语音；微信发音频文件</small></label><label class="switch"><input id="bot-voice-text" type="checkbox"><span></span><b>同时发送文字</b><small>关闭后语音成功时只发音频</small></label></div>
+          <div class="switch-grid"><label class="switch"><input id="bot-voice-enabled" type="checkbox"><span></span><b>允许语音回复</b><small>Telegram 发语音；微信发音频文件</small></label><label class="switch" data-channel-panel="telegram"><input id="bot-voice-text" type="checkbox"><span></span><b>同时发送文字</b><small>默认关闭，语音发送失败时会自动发文字</small></label><label class="switch" data-channel-panel="wechat-clawbot" hidden><input id="bot-wechat-voice-text" type="checkbox"><span></span><b>同时发送文字</b><small>关闭后音频成功时只发音频</small></label></div>
           <div class="form-grid two"><div><label for="bot-voice-profile">声音预设</label><select id="bot-voice-profile"></select><p id="bot-voice-profile-help" class="hint"></p></div><div><label for="bot-transcription">收到语音时的转写连接（Telegram）</label><select id="bot-transcription"></select></div></div>
           <p class="hint">微信语音输入使用微信随消息提供的转写文字；微信没附转写时会如实提示，不会把听不懂的内容交给模型猜。</p>
           <label for="bot-voice-probability">语音回复概率 · <output id="bot-voice-value">0%</output></label><input id="bot-voice-probability" type="range" min="0" max="100" step="1"><p class="hint">0% 永不自动发语音，100% 每轮都尝试；保存后下一轮实时生效。</p>
@@ -110,6 +110,8 @@
           <details class="bot-section" data-bot-section="tools"><summary><span>外部工具 / MCP</span><small data-section-status="tools"></small></summary><div class="bot-section-body">
           <div class="switch-grid"><label class="switch"><input id="bot-tools-enabled" type="checkbox"><span></span><b>启用工具</b><small>仅注入已选连接</small></label><label class="switch"><input id="bot-tool-writes" type="checkbox"><span></span><b>允许写操作</b><small>下单、预约等高风险能力</small></label></div>
           <div class="form-grid two"><div><label for="bot-tool-connections">工具连接（可多选）</label><select id="bot-tool-connections" multiple size="4"></select></div><div><label for="bot-tool-names">工具白名单</label><textarea id="bot-tool-names" rows="4" placeholder="逗号分隔；留空表示连接内全部工具"></textarea></div></div>
+          <div class="button-row"><button type="button" id="bot-tool-load">载入工具</button><span class="hint" id="bot-tool-status" aria-live="polite"></span></div>
+          <div id="bot-tool-catalog"></div>
           <p class="hint">默认只能运行标记为只读的工具。付款、下单、发消息等写操作即使服务支持，也要单独打开开关。</p>
           </div></details>
           <details class="bot-section" data-bot-section="wake"><summary><span>自动唤醒</span><small data-section-status="wake"></small></summary><div class="bot-section-body">

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { listToolPages } from './mcp-tool-pages.mjs';
 
 export class McpRemoteClient {
   constructor({ connection, secret, fetchImpl = fetch }) {
@@ -6,7 +7,8 @@ export class McpRemoteClient {
   }
 
   async listTools(signal) {
-    await this.#initialize(signal); return (await this.#request('tools/list', {}, signal))?.tools || [];
+    await this.#initialize(signal);
+    return listToolPages((method, params) => this.#request(method, params, signal));
   }
 
   async callTool(name, args, signal) {

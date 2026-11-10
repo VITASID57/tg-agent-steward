@@ -33,3 +33,33 @@ test('one memory MCP connection can also provide the bot tool catalog', async ()
   const tools = await broker.listForBot({ tools: { enabled: true, connectionIds: ['memory'], allowedToolNames: [] } });
   assert.deepEqual(tools.map((item) => item.name), ['search_memory']);
 });
+
+test('per-connection switches apply to both discovery and manual calls across paginated MCP catalogs', async () => {
+  const connections = ['first', 'second'].map((id) => ({ id, kind: 'mcp-remote',
+    baseUrl: `https://${id}.test/mcp`, capabilities: ['tools'], options: { accessMode: 'read-only' } }));
+  const calls = [];
+  const png = Buffer.from('89504e470d0a1a0a', 'hex');
+  const broker = new ToolBroker({ controlPlaneStore: { async get() { return { connections }; } },
+    secretStore: { async read() { return ''; } }, fetchImpl: async (url, init) => {
+      const request = JSON.parse(init.body);
+      if (!request.id) return new Response(null, { status: 202 });
+      if (request.method === 'initialize') return rpcResult(request, {});
+      if (request.method === 'tools/list') {
+        if (!request.params.cursor) return rpcResult(request, { tools: [{ name: 'search' }], nextCursor: 'page2' });
+        return rpcResult(request, { tools: [{ name: 'paint' }] });
+      }
+      calls.push(url.hostname);
+      return rpcResult(request, { content: [{ type: 'text', text: 'done' }, { type: 'image', data: png.toString('base64') }] });
+    } });
+  const bot = { tools: { enabled: true, connectionIds: ['first', 'second'],
+    disabledByConnection: { first: ['paint'], second: ['search'] }, allowedToolNames: [] } };
+  assert.deepEqual((await broker.listConnection('first')).map((tool) => tool.name), ['search', 'paint']);
+  assert.deepEqual((await broker.listForBot(bot)).map((tool) => [tool.name, tool.connectionId]), [['search', 'first'], ['paint', 'second']]);
+  const result = await broker.callForBot(bot, 'paint', {}, { manual: true });
+  assert.deepEqual(calls, ['second.test']);
+  assert.equal(result.output, 'done');
+  assert.deepEqual(result.images[0].image, png);
+  bot.tools.disabledByConnection.second.push('paint');
+  await assert.rejects(broker.callForBot(bot, 'paint', {}, { manual: true }), /关闭/u);
+  assert.deepEqual(calls, ['second.test']);
+});

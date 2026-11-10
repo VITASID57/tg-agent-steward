@@ -33,6 +33,10 @@
 连接、Bot、声音、生图、表情包和人物是独立资源。Bot 只保存资源 ID，不会复制凭据或
 人物正文。
 
+Bot 的 `tools.disabledByConnection` 按连接 ID 保存关闭的工具名数组。它和
+`tools.allowedToolNames` 白名单同时生效。Telegram 使用
+`voice.telegramSendTextWithVoice` 选择是否同时发正文，默认关闭。
+
 连接自检结果会写回连接的 `lastTest`。实时目录或 CLI 可用时返回 `passed`；只有保存／
 内置目录或缺少统一安全探测接口时返回 `warning`；缺少必要字段或连接失败时返回
 `failed`。Bot 时间线最多保留最近 80 条运行元数据，错误会脱敏，不保存用户消息或

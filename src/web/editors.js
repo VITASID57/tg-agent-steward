@@ -13,6 +13,7 @@ import { bindConnectionTest, fillConnectionTest } from './connection-health.js';
 import { bindModelRefresh, loadModelPicker } from './model-picker.js';
 import { bindResourceBrowsers, refreshResourceBrowsers, resourceSaved, resourceRemoved } from './resource-browser.js';
 import { createResourceDefinitions } from './resource-definitions.js';
+import { bindToolSwitches, fillToolSwitches, disabledToolSettings } from './tool-switches.js';
 
 const KINDS = [
   ['codex', 'Codex 订阅 / CLI'], ['claude', 'Claude Code 订阅 / CLI'], ['grok-build', 'Grok Build 订阅 / CLI'],
@@ -33,6 +34,7 @@ export function bindEditors(app) {
   bindConnectionCatalog();
   bindConnectionTest();
   bindBotCards(app, fillBot); bindBotSections(); bindBotAvatar();
+  bindToolSwitches();
   bindWechatEditor(app, () => saveBotDraft(app));
   bindRuntimeUi();
   $('#connection-kind').onchange = showConnectionFields;
@@ -147,7 +149,9 @@ function fillBot(app, itemId) {
   multiOptions($('#bot-sticker-packs'), app.data.stickerPacks, item?.stickers?.packIds || []);
   multiOptions($('#bot-tool-connections'), toolConnections, item?.tools?.connectionIds || []);
   $('#bot-model').value = ''; $('#bot-effort').value = '';
-  $('#bot-voice-enabled').checked = item?.voice?.enabled ?? false; $('#bot-voice-text').checked = item?.voice?.sendTextWithVoice ?? true;
+  $('#bot-voice-enabled').checked = item?.voice?.enabled ?? false;
+  $('#bot-voice-text').checked = item?.voice?.telegramSendTextWithVoice ?? false;
+  $('#bot-wechat-voice-text').checked = item?.voice?.sendTextWithVoice ?? true;
   $('#bot-voice-probability').value = item?.voice?.replyProbability ?? 0; $('#bot-allowed').value = item?.telegram?.allowedChatIds?.join(', ') || '';
   $('#bot-telegram-typing').checked = item?.telegram?.typingIndicator ?? true;
   $('#bot-telegram-split').checked = item?.telegram?.splitParagraphs ?? true;
@@ -162,6 +166,7 @@ function fillBot(app, itemId) {
   $('#bot-image-enabled').checked = item?.image?.enabled ?? false; $('#bot-tools-enabled').checked = item?.tools?.enabled ?? false;
   $('#bot-stickers-enabled').checked = item?.stickers?.enabled ?? false; $('#bot-sticker-probability').value = item?.stickers?.replyProbability ?? 30;
   $('#bot-tool-names').value = item?.tools?.allowedToolNames?.join(', ') || ''; $('#bot-tool-writes').checked = item?.tools?.allowWrites ?? false;
+  fillToolSwitches(item?.tools);
   const suggestedWakeTarget = item?.channel?.type === 'wechat-clawbot' && item?.wechat?.allowedUserIds?.length === 1
     ? item.wechat.allowedUserIds[0] : '';
   $('#bot-wake-enabled').checked = item?.wake?.enabled ?? false; $('#bot-wake-chat').value = item?.wake?.targetChatId || suggestedWakeTarget;
@@ -180,13 +185,14 @@ function fillBot(app, itemId) {
 }
 
 async function saveBot(event, app) {
-  event.preventDefault(); const existingId = $('#bot-id').value; const body = botBody();
+  event.preventDefault(); const existingId = $('#bot-id').value; const body = botBody(app);
   const saved = await api(existingId ? `/api/bots/${encodeURIComponent(existingId)}` : '/api/bots', { method: existingId ? 'PUT' : 'POST', body: jsonBody(body) });
   botSaved(saved.id);
   toast('Bot 设置已保存并实时应用'); await app.reload();
 }
 
-function botBody() {
+function botBody(app) {
+  const existing = app.data.bots.find((bot) => bot.id === $('#bot-id').value);
   return { name: $('#bot-name').value, avatar: $('#bot-avatar').value, enabled: $('#bot-enabled').checked, profileId: $('#bot-profile').value,
     channel: { type: $('#bot-channel').value },
     telegramToken: $('#bot-token').value, chat: { connectionId: $('#bot-chat-connection').value, model: $('#bot-model').value,
@@ -199,10 +205,12 @@ function botBody() {
       longMessageSplit: $('#bot-wechat-long-split').checked }, voice: {
       enabled: $('#bot-voice-enabled').checked, replyProbability: Number($('#bot-voice-probability').value),
       voiceProfileId: $('#bot-voice-profile').value || null, transcriptionConnectionId: $('#bot-transcription').value || null,
-      sendTextWithVoice: $('#bot-voice-text').checked }, image: { enabled: $('#bot-image-enabled').checked,
+      sendTextWithVoice: $('#bot-wechat-voice-text').checked, telegramSendTextWithVoice: $('#bot-voice-text').checked },
+    image: { enabled: $('#bot-image-enabled').checked,
       imageProfileId: $('#bot-image-profile').value || null }, tools: { enabled: $('#bot-tools-enabled').checked,
       connectionIds: [...$('#bot-tool-connections').selectedOptions].map((option) => option.value),
-      allowedToolNames: csv($('#bot-tool-names').value), allowWrites: $('#bot-tool-writes').checked, maxCalls: 2 },
+      allowedToolNames: csv($('#bot-tool-names').value), disabledByConnection: disabledToolSettings(),
+      allowWrites: $('#bot-tool-writes').checked, maxCalls: existing?.tools?.maxCalls ?? 2 },
     stickers: { enabled: $('#bot-stickers-enabled').checked,
       packIds: [...$('#bot-sticker-packs').selectedOptions].map((option) => option.value),
       replyProbability: Number($('#bot-sticker-probability').value) },
@@ -217,7 +225,7 @@ function botBody() {
 
 async function saveBotDraft(app) {
   const existingId = $('#bot-id').value; const saved = await api(existingId ? `/api/bots/${encodeURIComponent(existingId)}` : '/api/bots', {
-    method: existingId ? 'PUT' : 'POST', body: jsonBody(botBody()),
+    method: existingId ? 'PUT' : 'POST', body: jsonBody(botBody(app)),
   });
   botDraftSaved(saved.id); await app.reload(); return saved.id;
 }

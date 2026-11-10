@@ -51,10 +51,10 @@ export function defaultControlPlane(legacy = {}) {
       },
       voice: {
         enabled: false, replyProbability: 0, voiceProfileId: null, transcriptionConnectionId: null,
-        sendTextWithVoice: true,
+        sendTextWithVoice: true, telegramSendTextWithVoice: false,
       },
       image: { enabled: false, imageProfileId: null },
-      tools: { enabled: false, connectionIds: [], allowedToolNames: [], allowWrites: false, maxCalls: 2 },
+      tools: { enabled: false, connectionIds: [], allowedToolNames: [], disabledByConnection: {}, allowWrites: false, maxCalls: 2 },
       stickers: { enabled: false, packIds: [], replyProbability: 30 },
       wake: {
         enabled: false, targetChatId: null, scheduleMode: 'random', intervalMinutes: 60,

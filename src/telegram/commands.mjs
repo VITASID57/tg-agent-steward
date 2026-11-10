@@ -21,7 +21,7 @@ export async function handleCommand({ text, chatId, bot, manager, controlPlaneSt
     const call = parseToolCall(text.trim().slice(raw.length).trim());
     if (!call) return { handled: true, text: '用法：/tool 工具名 {"参数":"值"}' };
     const result = await toolBroker.callForBot(bot, call.name, call.arguments, { manual: true });
-    return { handled: true, text: formatToolResult(result) };
+    return { handled: true, text: formatToolResult(result.output), images: result.images, imageErrors: result.imageErrors };
   }
   if (command === '/new') return { handled: true, text: (await manager.newSession(chatId, bot.id), '已开启新会话。') };
   if (command === '/stop') {

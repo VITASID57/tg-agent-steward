@@ -76,8 +76,12 @@ export class TelegramRuntime {
         imageService: this.imageService, toolBroker: this.toolBroker }) : command;
     } catch (error) { return this.client.sendMessage(chatId, `操作失败：${safeError(error)}`); }
     if (command.handled) {
-      if (command.image) await this.client.sendPhoto(chatId, command.image.image, `image.${command.image.extension}`, command.text);
-      else await this.client.sendMessage(chatId, command.text);
+      if (command.image) {
+        await this.#sendImages(chatId, [command.image], 0, command.text);
+      } else {
+        await this.#sendImages(chatId, command.images, command.imageErrors);
+        await this.#sendText(chatId, command.text, { splitParagraphs: false, longMessageSplit: true });
+      }
       return;
     }
     if (!bot.telegram.allowedChatIds.includes(chatId)) {
@@ -109,39 +113,24 @@ export class TelegramRuntime {
     }
     try {
       const imagePrompt = !context.wake ? imageRequestPrompt(text) : null;
-      if (imagePrompt) {
-        if (!bot.image?.enabled || !bot.image.imageProfileId) {
-          await this.client.sendMessage(chatId, '这个 Bot 还没有启用生图路线。');
-          return { sent: true, image: false };
-        }
+      if (imagePrompt && bot.image?.enabled && bot.image.imageProfileId) {
         const image = await this.imageService.generate(bot.image.imageProfileId, imagePrompt);
-        await this.client.sendPhoto(chatId, image.image, `image.${image.extension}`, image.fallbackNote || '');
-        await this.eventStore?.record(bot.id, { kind: 'reply', status: 'success', title: '图片回复已发送', detail: '生图' });
-        return { sent: true, image: true };
+        const imageSent = await this.#sendImages(chatId, [image], 0, image.fallbackNote || '');
+        await this.eventStore?.record(bot.id, { kind: 'reply', status: imageSent ? 'success' : 'error',
+          title: imageSent ? '图片回复已发送' : '图片回复发送失败', detail: '生图' });
+        return { sent: true, image: Boolean(imageSent) };
+      }
+      if (imagePrompt && !(bot.tools?.enabled && bot.tools.connectionIds?.length)
+        && !state.connections?.some((item) => item.id === bot.chat?.connectionId && item.kind === 'codex')) {
+        await this.client.sendMessage(chatId, '这个 Bot 还没有启用生图路线。');
+        return { sent: true, image: false };
       }
       const voiceGuide = bot.voice.enabled && bot.voice.voiceProfileId && this.voiceService.instruction
         ? await this.voiceService.instruction(bot.voice.voiceProfileId).catch(() => '') : '';
       const result = await this.manager.reply(chatId, text, { surface: 'telegram', botId: bot.id, voiceGuide, ...context });
       if (context.wake && result.text.trim() === '[[SILENT]]') return { sent: false, reason: 'silent' };
-      let voice = null; let voiceError = null;
-      const explicitVoice = !context.wake && isExplicitVoiceRequest(text);
-      if ((result.speechText || result.text) && bot.voice.enabled && bot.voice.voiceProfileId
-        && (explicitVoice || shouldSendVoice(bot.voice, this.random))) {
-        voice = await this.voiceService.synthesize(bot.voice.voiceProfileId, result.speechText || result.text).catch((error) => {
-          voiceError = error; this.logger.error(`Voice ${bot.id}: ${error.message}`); return null;
-        });
-      }
-      if (!voice || bot.voice.sendTextWithVoice) {
-        for (const part of splitTelegramMessage(result.text, bot.telegram)) {
-          await this.client.sendMessage(chatId, part);
-          if (bot.telegram.splitParagraphs) await new Promise((resolve) => setTimeout(resolve, 280));
-        }
-      }
-      if (voice) {
-        if (voice.mime === 'audio/wav') await this.client.sendAudio(chatId, voice.audio, `reply.${voice.extension}`);
-        else await this.client.sendVoice(chatId, voice.audio, `reply.${voice.extension}`);
-      }
-      if (explicitVoice && voiceError) await this.client.sendMessage(chatId, `语音没有发出去：${safeError(voiceError)}`);
+      const imageSent = await this.#sendImages(chatId, result.images, result.imageErrors);
+      const delivery = await this.#sendReplyText(chatId, bot, result, !context.wake && isExplicitVoiceRequest(text));
       let stickerSent = false;
       if (result.sticker && this.stickerService) {
         try {
@@ -150,9 +139,11 @@ export class TelegramRuntime {
           stickerSent = true;
         } catch (error) { this.logger.error(`Sticker ${bot.id}: ${error.message}`); }
       }
-      if (!context.wake) await this.eventStore?.record(bot.id, { kind: 'reply', status: 'success', title: '消息回复已发送',
-        detail: [voice ? '语音' : '', stickerSent ? '表情' : '', (!voice || bot.voice.sendTextWithVoice) ? '文字' : ''].filter(Boolean).join(' + ') || '回复已完成' });
-      return { sent: true, voice: Boolean(voice), sticker: stickerSent };
+      const sent = Boolean(imageSent || delivery.voice || delivery.text || stickerSent);
+      if (!context.wake) await this.eventStore?.record(bot.id, { kind: 'reply', status: sent ? 'success' : 'error',
+        title: sent ? '消息回复已发送' : '没有可发送的回复',
+        detail: [delivery.voice ? '语音' : '', delivery.text ? '文字' : '', imageSent ? '图片' : '', stickerSent ? '表情' : ''].filter(Boolean).join(' + ') || '回复已完成' });
+      return { sent, voice: delivery.voice, sticker: stickerSent };
     } catch (error) {
       if (!context.wake) await this.eventStore?.record(bot.id, { kind: 'reply', status: 'error', title: '消息回复失败', detail: safeError(error) });
       if (context.wake) throw error;
@@ -160,6 +151,51 @@ export class TelegramRuntime {
     } finally {
       if (typingTimer) clearInterval(typingTimer);
     }
+  }
+
+  async #sendReplyText(chatId, bot, result, explicitVoice) {
+    let voice = false; let voiceError = null;
+    const speech = result.speechText || result.text;
+    if (speech?.trim() && bot.voice.enabled && bot.voice.voiceProfileId
+      && (explicitVoice || shouldSendVoice(bot.voice, this.random))) {
+      try {
+        const audio = await this.voiceService.synthesize(bot.voice.voiceProfileId, speech);
+        if (audio.mime === 'audio/wav') await this.client.sendAudio(chatId, audio.audio, `reply.${audio.extension}`);
+        else await this.client.sendVoice(chatId, audio.audio, `reply.${audio.extension}`);
+        voice = true;
+      } catch (error) {
+        voiceError = error;
+        this.logger.error(`Voice ${bot.id}: ${safeError(error)}`);
+      }
+    }
+    const text = Boolean(result.text?.trim() && (!voice || bot.voice.telegramSendTextWithVoice));
+    if (text) await this.#sendText(chatId, result.text, bot.telegram);
+    if (explicitVoice && voiceError) await this.client.sendMessage(chatId, `语音没有发出去：${safeError(voiceError)}`);
+    return { voice, text };
+  }
+
+  async #sendText(chatId, text, settings) {
+    for (const part of splitTelegramMessage(text, settings)) {
+      await this.client.sendMessage(chatId, part);
+      if (settings.splitParagraphs) await new Promise((resolve) => setTimeout(resolve, 280));
+    }
+  }
+
+  async #sendImages(chatId, images = [], failures = 0, caption = '') {
+    let sent = 0;
+    for (const { image, extension } of images) {
+      try {
+        const filename = `image.${extension}`;
+        if (image.length > 10 * 1024 * 1024) await this.client.sendDocument(chatId, image, filename, caption.slice(0, 1024));
+        else await this.client.sendPhoto(chatId, image, filename, caption.slice(0, 1024));
+        sent += 1;
+      } catch (error) {
+        failures += 1;
+        this.logger.error(`Image ${this.botId}: ${safeError(error)}`);
+      }
+    }
+    if (failures) await this.client.sendMessage(chatId, `有 ${failures} 张图片没能发送，请稍后再试。`);
+    return sent;
   }
 
   proactive(chatId, prompt, context = {}) { return this.#reply(String(chatId), prompt, { wake: true, ...context }); }

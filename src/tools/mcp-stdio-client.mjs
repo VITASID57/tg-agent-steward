@@ -1,12 +1,13 @@
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
+import { listToolPages } from './mcp-tool-pages.mjs';
 
 export class McpStdioClient {
   constructor({ connection, secret, spawnImpl = spawn }) { this.connection = connection; this.secret = secret; this.spawn = spawnImpl; }
-  listTools(signal) { return this.#run('tools/list', {}, signal).then((result) => result?.tools || []); }
-  callTool(name, args, signal) { return this.#run('tools/call', { name, arguments: args }, signal); }
+  listTools(signal) { return this.#run(listToolPages, signal); }
+  callTool(name, args, signal) { return this.#run((request) => request('tools/call', { name, arguments: args }), signal); }
 
-  async #run(method, params, signal) {
+  async #run(work, signal) {
     const options = this.connection.options || {}; if (!options.command) throw new Error('本机 MCP 没有配置命令');
     const env = { ...process.env, ...(options.env || {}) };
     if (this.secret && options.secretEnv) env[options.secretEnv] = this.secret;
@@ -25,7 +26,7 @@ export class McpStdioClient {
     try {
       await request('initialize', { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'tg-agent-steward', version: '0.3.0' } });
       child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} })}\n`);
-      return await request(method, params);
+      return await work(request);
     } catch (error) { throw new Error(error.message || stderr.trim() || '本机 MCP 调用失败'); }
     finally { signal?.removeEventListener('abort', stop); lines.close(); stop(); }
   }
