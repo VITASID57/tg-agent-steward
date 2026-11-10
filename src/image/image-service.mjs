@@ -111,14 +111,14 @@ async function subscriptionImage({ connection, prompt, signal, runImpl }) {
     const env = stripApiCredentials(process.env); const command = connection.options?.command || (connection.kind === 'codex' ? 'codex' : 'grok');
     const generatedRoot = connection.kind === 'codex'
       ? join(process.env.CODEX_HOME || join(homedir(), '.codex'), 'generated_images') : '';
-    const before = new Set(generatedRoot ? await findImages(generatedRoot) : []);
+    const before = generatedRoot ? await imageSnapshot(generatedRoot) : new Map();
     const instruction = `Generate exactly one image for this prompt: ${prompt}\nSave the final PNG or JPEG in the current working directory.`;
     const args = connection.kind === 'codex'
       ? ['exec', '-s', 'workspace-write', '-C', folder, '--skip-git-repo-check', '--ephemeral', `$imagegen ${instruction}`]
       : ['--cwd', folder, '-p', `Use Grok Imagine. ${instruction}`];
     await runImpl(command, args, { cwd: folder, env, signal, timeoutMs: Number(connection.options?.timeoutMs) || 240_000 });
     const localFiles = await findImages(folder);
-    const generatedFiles = generatedRoot ? (await findImages(generatedRoot)).filter((file) => !before.has(file)) : [];
+    const generatedFiles = generatedRoot ? await changedImages(generatedRoot, before) : [];
     const file = await newestImage([...localFiles, ...generatedFiles]);
     if (!file) throw new Error('订阅生图完成但没有找到输出图片');
     return checked(await readFile(file));
@@ -135,6 +135,16 @@ async function findImages(folder) {
 async function newestImage(files) {
   const dated = await Promise.all(files.map(async (file) => ({ file, mtime: (await stat(file)).mtimeMs })));
   return dated.sort((a, b) => b.mtime - a.mtime)[0]?.file || '';
+}
+async function imageSnapshot(folder) {
+  const files = await findImages(folder); const entries = await Promise.all(files.map(async (file) => {
+    const info = await stat(file); return [file, `${info.mtimeMs}:${info.size}`];
+  }));
+  return new Map(entries);
+}
+async function changedImages(folder, before) {
+  const after = await imageSnapshot(folder);
+  return [...after].filter(([file, signature]) => before.get(file) !== signature).map(([file]) => file);
 }
 function serializeSubscription(key, work) {
   const previous = subscriptionQueues.get(key) || Promise.resolve();

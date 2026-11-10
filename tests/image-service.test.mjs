@@ -54,11 +54,11 @@ test('Codex subscription images are collected from CODEX_HOME generated_images',
   const root = await mkdtemp(join(tmpdir(), 'codex-home-')); const previous = process.env.CODEX_HOME;
   process.env.CODEX_HOME = root;
   try {
+    const output = join(root, 'generated_images', 'thread', 'result.png');
+    await mkdir(join(root, 'generated_images', 'thread'), { recursive: true });
+    await writeFile(output, Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.from([9])]));
     const result = await generateImageRoute({ connection: { kind: 'codex', options: {} }, route: {}, prompt: 'gentian',
-      runImpl: async () => {
-        const output = join(root, 'generated_images', 'thread', 'result.png');
-        await mkdir(join(root, 'generated_images', 'thread'), { recursive: true }); await writeFile(output, png);
-      } });
+      runImpl: async () => { await writeFile(output, png); } });
     assert.deepEqual(result.image, png); assert.equal(result.mime, 'image/png');
   } finally {
     if (previous === undefined) delete process.env.CODEX_HOME; else process.env.CODEX_HOME = previous;
