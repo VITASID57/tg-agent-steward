@@ -35,7 +35,9 @@ Telegram / 微信 Bot 连接、模型与能力设置的控制台。外置记忆�
 - Telegram 语音消息可经 ElevenLabs、OpenAI 兼容接口、Vertex/Gemini 或本机
   Whisper 转写，再进入同一条对话链。
 - Telegram 的生图预设支持首选与备用：Codex / Grok 订阅 CLI、OpenAI 兼容中转、
-  Vertex、NovelAI 与 ComfyUI。聊天中请求画图或发 `/draw 画面描述` 都可调用。
+  Vertex、NovelAI 与 ComfyUI。Vertex API Key／赠金线路请在 Telegram 单独发送
+  `/draw 画面描述`。部署时可选把 `/draw` 加到 Telegram 指令菜单，
+  具体用法见 [媒体设置](./docs/media-tools-wake.md#telegram-command-menu)。
 - 通用 MCP 支持远程 Streamable HTTP 和本机 stdio；Bot 只看到勾选的连接和
   白名单工具。模型可先调工具再回答，也可用 `/tools`、`/tool` 手动调用。
 - 通用外置记忆 HTTP / MCP 接口：首轮或长时间离线使用 `awakening`，普通接续使用

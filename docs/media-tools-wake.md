@@ -22,11 +22,32 @@ only stores the image-route ID.
   optional `outputNodeId` in route-options JSON. The steward queues `/prompt`,
   polls `/history/:id`, then downloads `/view`.
 
-Use `/draw` or ask for a picture in chat. Telegram uploads generated images
-from the configured image route, native Codex image events, and inline MCP
-image results. `/draw` uses the configured image route and takes a text prompt.
-When a Telegram Bot has an image preset, clear drawing requests go to that
-preset before the chat engine can choose external tools.
+For the Vertex API-key or Cloud-credit route, send a separate Telegram message
+starting with `/draw ` followed by the scene description. For example,
+`/draw 一只白猫坐在窗边，窗外下雨，暖色水彩`. This invokes the Bot's configured image
+preset directly. Some conversational requests are recognized, but a message
+mixed into normal chat can stay in the conversation path.
+
+Telegram uploads generated images from the configured route, native Codex image
+events, and inline MCP image results.
+
+### Telegram command menu
+
+When deploying for someone, optionally add the commands for their enabled
+features to the Bot's Telegram menu. The owner can use BotFather's
+`/setcommands`, or the deployer can use the official Bot API's
+[`getMyCommands` and `setMyCommands`](https://core.telegram.org/bots/api#setmycommands)
+with the Bot token. Keep existing commands in the same scope and language
+when adding new ones. Use entries like these:
+
+```text
+draw - 画图，输入 /draw 加画面描述
+voice - 用声音预设回一句语音
+status - 查看当前聊天引擎和模型
+```
+
+The menu lists command names and descriptions. For a reusable scene, save or
+share the full `/draw 画面描述` as a copyable phrase.
 
 ## Voice
 
