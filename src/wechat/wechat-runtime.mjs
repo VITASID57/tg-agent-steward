@@ -39,11 +39,11 @@ export class WechatRuntime {
       } catch (error) {
         if (signal.aborted || error.name === 'AbortError' || error.name === 'TimeoutError') continue;
         if (Number(error.code) === -14) {
-          const detail = '微信登录已过期，请重新扫码连接。';
+          const detail = '微信没有放行这次登录，会话已失效。若手机显示“运行环境存在风险”，这是微信上游限制，请先暂停重复扫码。';
           this.logger.error(`WeChat polling ${this.botId}: ${detail}`);
           await this.#save({ syncBuffer: '' });
           this.onStatus?.({ running: false, lastError: detail });
-          await this.eventStore?.record(this.botId, { kind: 'channel', status: 'error', title: '微信登录已过期', detail });
+          await this.eventStore?.record(this.botId, { kind: 'channel', status: 'error', title: '微信登录未获放行', detail });
           break;
         }
         failures += 1; this.logger.error(`WeChat polling ${this.botId}: ${safeError(error)}`);

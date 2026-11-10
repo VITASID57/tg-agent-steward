@@ -93,7 +93,7 @@ export class WechatClient {
     const parsed = parseJson(payload);
     if ((parsed.ret && parsed.ret !== 0) || (parsed.errcode && parsed.errcode !== 0)) {
       const code = Number(parsed.errcode || parsed.ret);
-      const error = new Error(code === -14 ? '微信登录已过期，请重新扫码连接。'
+      const error = new Error(code === -14 ? '微信没有放行这次登录，会话已失效。若手机显示“运行环境存在风险”，这是微信上游限制，请先暂停重复扫码。'
         : `微信通道返回错误：${parsed.errmsg || parsed.ret || parsed.errcode}`);
       error.code = code;
       throw error;

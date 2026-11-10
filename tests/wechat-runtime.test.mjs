@@ -52,7 +52,7 @@ test('wechat runtime stops polling and surfaces an expired login', async () => {
   });
   await runtime.start(); await waitFor(() => statuses.some((item) => item.running === false)); runtime.stop();
   assert.equal(polls, 1);
-  assert.match(statuses.at(-1).lastError, /重新扫码/u);
+  assert.match(statuses.at(-1).lastError, /上游限制/u);
 });
 
 test('wechat voice transcript becomes user text and can be switched off', () => {

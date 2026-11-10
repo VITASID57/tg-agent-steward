@@ -61,7 +61,7 @@ test('wechat client announces channel start and stop', async () => {
 
 test('wechat client turns an expired iLink session into an actionable error', async () => {
   const client = new WechatClient({ token: 'expired', fetchImpl: async () => response({ errcode: -14, errmsg: 'session timeout' }) });
-  await assert.rejects(() => client.getUpdates(), (error) => error.code === -14 && /重新扫码/u.test(error.message));
+  await assert.rejects(() => client.getUpdates(), (error) => error.code === -14 && /上游限制/u.test(error.message));
 });
 
 test('wechat client starts and stops the official typing indicator', async () => {
