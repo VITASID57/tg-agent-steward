@@ -96,6 +96,15 @@ test('ElevenLabs model catalog does not duplicate v1 when the saved base URL alr
   assert.equal(requested, 'https://api.elevenlabs.io/v1/models');
 });
 
+test('failed ElevenLabs catalogs fall back by purpose instead of mixing cached TTS and STT models', async () => {
+  const engine = new HttpChatEngine({ connection: { id: 'voice', kind: 'elevenlabs', baseUrl: 'https://api.elevenlabs.io/v1',
+    cachedModels: ['eleven_v4', 'scribe_v2'], options: {} }, secret: 'wrong', sessions: sessions(),
+  fetchImpl: async () => Response.json({ detail: { status: 'invalid_api_key' } }, { status: 401 }) });
+  const tts = await engine.capabilities({ purpose: 'tts' }); const stt = await engine.capabilities({ purpose: 'stt' });
+  assert.equal(tts.source, 'built-in'); assert.ok(tts.models.some((item) => item.id === 'eleven_v4'));
+  assert.equal(stt.source, 'built-in'); assert.deepEqual(stt.models.map((item) => item.id), ['scribe_v2']);
+});
+
 test('providers without a live catalog expose selectable built-in routes instead of free text', async () => {
   const engine = new HttpChatEngine({ connection: { id: 'minimax', kind: 'minimax', baseUrl: '', cachedModels: [], options: {} },
     secret: '', sessions: sessions(), fetchImpl: async () => { throw new Error('should not fetch'); } });

@@ -21,9 +21,10 @@ export class HttpChatEngine {
         catalogNote = 'Google 的实时模型目录只接受 OAuth；API Key 仍可用于模型调用，当前显示内置 Vertex 模型。';
       }
     }
-    if (this.connection.kind === 'vertex-ai') models = mergeModels(models, builtInModels(this.connection.kind, purpose));
+    const builtIn = builtInModels(this.connection.kind, purpose);
+    if (this.connection.kind === 'vertex-ai') models = mergeModels(models, builtIn);
+    if (!models.length && builtIn.length) { models = builtIn; source = 'built-in'; }
     if (!models.length) models = this.connection.cachedModels.map((id) => ({ id, name: id }));
-    if (!models.length) { models = builtInModels(this.connection.kind, purpose); source = 'built-in'; }
     else if (this.connection.kind === 'vertex-ai' && source !== 'live') source = 'built-in';
     const efforts = this.connection.kind === 'vertex-ai'
       ? ['minimal', 'low', 'medium', 'high'] : ['low', 'medium', 'high'];
@@ -168,15 +169,16 @@ function modelItems(items, nameKey = 'name') {
 }
 
 function builtInModels(kind, purpose) {
+  const vertexChat = [
+    { id: 'gemini-4-argon', name: 'Gemini 4 Argon', efforts: ['low', 'medium', 'high'] },
+    'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash',
+    'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-2.5-pro', 'gemini-2.5-flash',
+  ];
   const catalogs = {
     minimax: { tts: ['speech-2.8-hd', 'speech-2.8-turbo'] },
     elevenlabs: { tts: ['eleven_v4', 'eleven_v4_turbo', 'eleven_v3', 'eleven_multilingual_v2', 'eleven_flash_v2_5'], stt: ['scribe_v2'] },
     'vertex-ai': {
-      chat: [
-        { id: 'gemini-4-argon', name: 'Gemini 4 Argon', efforts: ['low', 'medium', 'high'] },
-        'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash',
-        'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-2.5-pro', 'gemini-2.5-flash',
-      ],
+      chat: vertexChat, stt: vertexChat,
       tts: ['gemini-2.5-flash-tts'], image: ['gemini-2.5-flash-image', 'imagen-4.0-generate-001'],
     },
     novelai: { image: ['nai-diffusion-4-full'] },
