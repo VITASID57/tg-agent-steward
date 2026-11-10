@@ -56,11 +56,32 @@ export class ControlPlaneStore {
   }
 
   async upsertBot(input) {
-    const state = await this.get(); const now = new Date().toISOString();
-    const previous = state.bots.find((item) => item.id === input.id);
-    const next = normalizeBot({ ...input, avatar: input.avatar ?? previous?.avatar, id: input.id || `bot-${randomUUID()}`,
-      createdAt: previous?.createdAt || now, updatedAt: now });
-    return this.#write({ ...state, bots: replace(state.bots, next) }, next);
+    const legacy = await this.legacyStore?.get().catch(() => ({})) ?? {};
+    const now = new Date().toISOString();
+    let next;
+    await this.file.update((raw) => {
+      const state = normalizeControlPlane(raw, legacy);
+      const previous = state.bots.find((item) => item.id === input.id);
+      next = normalizeBot({ ...input, avatar: input.avatar ?? previous?.avatar, id: input.id || `bot-${randomUUID()}`,
+        createdAt: previous?.createdAt || now, updatedAt: now });
+      return normalizeControlPlane({ ...state, bots: replace(state.bots, next) });
+    });
+    return next;
+  }
+
+  async grantTelegramChat(botId, chatId) {
+    await this.file.update((raw) => {
+      const state = normalizeControlPlane(raw);
+      const bot = state.bots.find((item) => item.id === botId);
+      if (!bot || !bot.enabled || bot.channel.type !== 'telegram') {
+        throw Object.assign(new Error('请先启用这张 Telegram Bot 卡。'), { statusCode: 409 });
+      }
+      if (!bot.telegram.allowedChatIds.includes(chatId)) {
+        if (bot.telegram.allowedChatIds.length >= 500) throw Object.assign(new Error('这张 Bot 卡的授权名单已满。'), { statusCode: 409 });
+        bot.telegram.allowedChatIds.push(chatId);
+      }
+      return state;
+    });
   }
 
   async removeConnection(id) {
@@ -77,9 +98,11 @@ export class ControlPlaneStore {
   }
 
   async removeBot(id) {
-    const state = await this.get();
-    if (state.bots.length <= 1) throw Object.assign(new Error('至少要保留一个 Bot'), { statusCode: 409 });
-    await this.#write({ ...state, bots: state.bots.filter((item) => item.id !== id) });
+    await this.file.update((raw) => {
+      const state = normalizeControlPlane(raw);
+      if (state.bots.length <= 1) throw Object.assign(new Error('至少要保留一个 Bot'), { statusCode: 409 });
+      return { ...state, bots: state.bots.filter((item) => item.id !== id) };
+    });
   }
 
   async removeStickerPack(id) {

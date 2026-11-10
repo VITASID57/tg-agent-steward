@@ -11,7 +11,8 @@ export class TelegramClient {
       body: JSON.stringify(body), signal,
     });
     const data = await response.json();
-    if (!response.ok || !data.ok) throw new Error(`Telegram ${method}: ${data.description ?? response.status}`);
+    if (!response.ok || !data.ok) throw Object.assign(new Error(`Telegram ${method}: ${data.description ?? response.status}`),
+      { telegramStatus: data.error_code || response.status });
     return data.result;
   }
 

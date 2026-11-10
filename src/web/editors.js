@@ -136,7 +136,7 @@ function fillBot(app, itemId) {
   $('#bot-id').value = item?.id || ''; $('#bot-name').value = item?.name || ''; $('#bot-token').value = '';
   $('#bot-channel').value = item?.channel?.type || 'telegram';
   $('#bot-avatar').value = item?.avatar || ''; resetAvatarFeedback();
-  $('#bot-enabled').checked = item?.enabled ?? false; $('#bot-group').checked = item?.telegram?.groupMode ?? false;
+  $('#bot-enabled').checked = item?.enabled ?? true; $('#bot-group').checked = item?.telegram?.groupMode ?? false;
   options($('#bot-profile'), app.data.profiles.map(named), item?.profileId); options($('#bot-chat-connection'), chatConnections.map(named), item?.chat?.connectionId);
   options($('#bot-voice-profile'), app.data.voiceProfiles.map(named), item?.voice?.voiceProfileId || '', '不使用语音');
   const usableVoices = app.data.voiceProfiles.filter((voice) => voice.primary?.connectionId);
@@ -186,16 +186,24 @@ function fillBot(app, itemId) {
 
 async function saveBot(event, app) {
   event.preventDefault(); const existingId = $('#bot-id').value; const body = botBody(app);
-  const saved = await api(existingId ? `/api/bots/${encodeURIComponent(existingId)}` : '/api/bots', { method: existingId ? 'PUT' : 'POST', body: jsonBody(body) });
-  botSaved(saved.id);
-  toast('Bot 设置已保存并实时应用'); await app.reload();
+  const submit = event.submitter;
+  if (submit) submit.disabled = true;
+  try {
+    const saved = await api(existingId ? `/api/bots/${encodeURIComponent(existingId)}` : '/api/bots', { method: existingId ? 'PUT' : 'POST', body: jsonBody(body) });
+    botSaved(saved.id);
+    toast('Bot 设置已保存'); await app.reload();
+  } catch (error) {
+    $('#bot-runtime-state').textContent = error.message;
+    toast(error.message, true);
+  } finally { if (submit) submit.disabled = false; }
 }
 
 function botBody(app) {
   const existing = app.data.bots.find((bot) => bot.id === $('#bot-id').value);
+  const channel = $('#bot-channel').value;
   return { name: $('#bot-name').value, avatar: $('#bot-avatar').value, enabled: $('#bot-enabled').checked, profileId: $('#bot-profile').value,
-    channel: { type: $('#bot-channel').value },
-    telegramToken: $('#bot-token').value, chat: { connectionId: $('#bot-chat-connection').value, model: $('#bot-model').value,
+    channel: { type: channel },
+    telegramToken: channel === 'telegram' ? $('#bot-token').value : '', chat: { connectionId: $('#bot-chat-connection').value, model: $('#bot-model').value,
       effort: $('#bot-effort').value, fallbackConnectionIds: [] }, telegram: { allowedChatIds: csv($('#bot-allowed').value),
       typingIndicator: $('#bot-telegram-typing').checked, splitParagraphs: $('#bot-telegram-split').checked,
       longMessageSplit: $('#bot-telegram-long-split').checked, mergeBurst: $('#bot-telegram-merge').checked,

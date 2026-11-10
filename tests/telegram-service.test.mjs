@@ -44,3 +44,25 @@ test('Telegram service records a startup failure and retries on the next reconci
   assert.equal((await service.reconcile(state)).bots[0].lastError, 'bad token');
   assert.equal((await service.reconcile(state)).bots[0].running, true);
 });
+
+test('Telegram verifies pasted tokens and replaces a running client when the saved token changes', async () => {
+  const values = { 'telegram:a': '123:old' };
+  const events = [];
+  const service = new TelegramService({
+    controlPlaneStore: { async get() { return { bots: [bot('a')] }; } }, secretStore: secrets(values),
+    async checkToken(token) {
+      if (token === '123:bad') throw Object.assign(new Error('provider error includes 123:bad'), { telegramStatus: 401 });
+    },
+    createRuntime: (_id, token) => ({
+      me: { username: token.endsWith('old') ? 'old_bot' : 'new_bot' },
+      async start() { events.push(`start ${this.me.username}`); },
+      stop() { events.push(`stop ${this.me.username}`); },
+    }),
+  });
+  assert.equal(await service.validateToken(' 123:new '), '123:new');
+  await assert.rejects(() => service.validateToken('123:bad'), (error) => error.statusCode === 400 && !error.message.includes('123:bad'));
+  assert.equal((await service.reconcile()).bots[0].username, 'old_bot');
+  values['telegram:a'] = '123:new';
+  assert.equal((await service.reconcile()).bots[0].username, 'new_bot');
+  assert.deepEqual(events, ['start old_bot', 'stop old_bot', 'start new_bot']);
+});

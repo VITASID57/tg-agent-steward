@@ -30,7 +30,7 @@ export class TelegramRuntime {
     if (this.controller) return;
     this.controller = new AbortController();
     try {
-      this.me = await this.client.getMe(this.controller.signal);
+      this.me = await this.client.getMe(AbortSignal.any([this.controller.signal, AbortSignal.timeout(8_000)]));
       this.#poll(this.controller.signal);
     } catch (error) {
       this.controller.abort();
@@ -71,7 +71,7 @@ export class TelegramRuntime {
     let text = message.text || '';
     let command = { handled: false };
     try {
-      command = text ? await handleCommand({ text, chatId, bot, manager: this.manager,
+      command = text ? await handleCommand({ text, chatId, chatType: message.chat.type, botUsername: this.me?.username, bot, manager: this.manager,
         controlPlaneStore: this.controlPlaneStore, pairing: this.pairing, engines: this.engines,
         imageService: this.imageService, toolBroker: this.toolBroker }) : command;
     } catch (error) { return this.client.sendMessage(chatId, `操作失败：${safeError(error)}`); }
@@ -85,7 +85,7 @@ export class TelegramRuntime {
       return;
     }
     if (!bot.telegram.allowedChatIds.includes(chatId)) {
-      return this.client.sendMessage(chatId, '这个账号还没有获得访问权限。请先使用主人给的一次性配对码。');
+      return this.client.sendMessage(chatId, 'Bot 已连通。请先在栖光庭的 Bot 卡片绑定你的 Telegram 账号。');
     }
     if (message.chat.type !== 'private') {
       if (!bot.telegram.groupMode || !isMentioned(text, this.me?.username)) return;

@@ -67,12 +67,13 @@ const connectionTester = new ConnectionTester({ controlPlaneStore, secretStore, 
 const stickerAssetStore = new StickerAssetStore(join(dataDir, 'sticker-assets'));
 const stickerService = new StickerService({ controlPlaneStore, assetStore: stickerAssetStore });
 const manager = new ConversationManager({ settingsStore, personaStore, controlPlaneStore, stateFile, engines, memoryProvider, toolBroker, stickerService });
-const pairing = new PairingService(controlPlaneStore);
+const pairing = new PairingService(controlPlaneStore, secretStore);
 const voiceService = new VoiceService({ controlPlaneStore, secretStore });
 const transcriptionService = new TranscriptionService({ controlPlaneStore, secretStore });
 const imageService = new ImageService({ controlPlaneStore, secretStore });
 const telegramService = new TelegramService({
   envToken: process.env.TELEGRAM_BOT_TOKEN, controlPlaneStore, secretStore, eventStore,
+  checkToken: (token) => new TelegramClient(token).getMe(AbortSignal.timeout(8_000)),
   createRuntime: (botId, token) => new TelegramRuntime({
     botId, client: new TelegramClient(token), controlPlaneStore, manager, pairing, engines, voiceService,
     transcriptionService, imageService, stickerService, toolBroker, eventStore,

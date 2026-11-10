@@ -4,7 +4,8 @@ import { ControlPlaneStore } from '../src/control/control-plane-store.mjs';
 
 function memoryFile(initial = {}) {
   let value = structuredClone(initial);
-  return { async read() { return structuredClone(value); }, async write(next) { value = structuredClone(next); } };
+  return { async read() { return structuredClone(value); }, async write(next) { value = structuredClone(next); },
+    async update(mutator) { value = structuredClone(await mutator(structuredClone(value))); return value; } };
 }
 
 test('a fresh public deployment starts without provider-specific connection presets', async () => {

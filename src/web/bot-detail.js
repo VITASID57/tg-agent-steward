@@ -1,6 +1,7 @@
 import { $ } from './dom.js';
 import { showAvatar } from './bot-avatar.js';
 import { loadBotDiagnostics } from './runtime-diagnostics.js';
+import { renderTelegramAccess } from './telegram-access.js';
 
 export function renderBotDetail(app, bot) {
   if (!bot) return;
@@ -23,6 +24,7 @@ export function renderBotDetail(app, bot) {
   status.className = `badge bot-detail-status ${bot.runtime?.running ? 'ok' : ''}`;
   status.textContent = bot.runtime?.running ? '运行中'
     : (bot.runtime?.lastError || (bot.enabled ? (configured ? '已启用 · 未运行' : '等待账号连接') : '已停用'));
+  renderTelegramAccess(app, bot);
 
   setText('bot-detail-connection', connection?.name || '连接缺失');
   setText('bot-detail-model', bot.chat?.model || '后端默认模型');

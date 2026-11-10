@@ -1,11 +1,16 @@
-export async function handleCommand({ text, chatId, bot, manager, controlPlaneStore, pairing, engines, imageService, toolBroker }) {
+export async function handleCommand({ text, chatId, chatType, botUsername, bot, manager, controlPlaneStore, pairing, engines, imageService, toolBroker }) {
   const [raw, arg = ''] = text.trim().split(/\s+/, 2);
   const command = raw.split('@')[0].toLowerCase();
+  if (command === '/start' && arg.startsWith('lko_')) {
+    const ok = chatType === 'private' && await pairing.redeemOwnerLink(bot.id, arg, chatId, botUsername);
+    return { handled: true, text: ok ? '你的账号已绑定。现在可以直接和我聊天了。' : '这个绑定链接已失效。请回栖光庭重新打开绑定链接。' };
+  }
   if (command === '/pair') {
     const ok = await pairing.redeem(bot.id, arg, chatId);
     return { handled: true, text: ok ? '配对成功。现在可以直接和我说话了。' : '配对码无效或已过期。' };
   }
-  if (!bot.telegram.allowedChatIds.includes(String(chatId))) return { handled: true, text: '这个账号还没有获得访问权限。请让主人在控制页生成一次性配对码。' };
+  if (!bot.telegram.allowedChatIds.includes(String(chatId))) return { handled: true, text: 'Bot 已连通。请在栖光庭的 Bot 卡片绑定你的 Telegram 账号；如果是别人邀请你，请使用对方给的配对码。' };
+  if (command === '/start') return { handled: true, text: '已经连上，可以直接发消息给我。' };
   if (command === '/draw') {
     if (!arg) return { handled: true, text: '请在 /draw 后面写画面描述。' };
     if (!bot.image.enabled || !bot.image.imageProfileId) return { handled: true, text: '这个 Bot 还没有启用生图路线。' };

@@ -124,8 +124,9 @@ A user who has a Telegram Bot and a model API key follows this path:
    connection in **连接预设**, including the user's own key;
 5. open **Bot**, paste the BotFather token, select the connection, model and
    persona, then enable and save the Bot;
-6. message the Bot in Telegram and complete pairing if access is not already
-   allowlisted.
+6. on the saved Bot card, select **去 Telegram 绑定我**, then press **Start**
+   in the private Telegram chat. For later Bots, select **允许我的 Telegram 账号**
+   to reuse the verified account. Invite codes are available for other people.
 
 A single centrally hosted website where unrelated users paste their Bot tokens
 would be a different product: a multi-tenant hosted service. It would need user

@@ -26,7 +26,7 @@ export function createApiHandler(services) {
       }, headers);
     }
     if (request.method === 'GET' && path === '/api/control-plane') {
-      return json(response, 200, await publicControlPlane(await controlPlaneStore.get(), secretStore, telegramService, wechatService), headers);
+      return json(response, 200, await publicControlPlane(await controlPlaneStore.get(), secretStore, telegramService, wechatService, pairing), headers);
     }
     if (request.method === 'POST' && path === '/api/connections') {
       const prepared = prepareConnectionInput(await readJson(request)); const saved = await controlPlaneStore.upsertConnection(prepared.body);
@@ -79,15 +79,19 @@ export function createApiHandler(services) {
       await stickerAssetStore.remove(stickerAssetId); return json(response, 200, { ok: true }, headers);
     }
     if (request.method === 'POST' && path === '/api/bots') {
-      const body = await readJson(request); const saved = await controlPlaneStore.upsertBot(body);
-      if (body.telegramToken) await secretStore.write(`telegram:${saved.id}`, body.telegramToken);
+      const body = await readJson(request);
+      const token = await telegramService.validateToken(body.telegramToken);
+      const saved = await controlPlaneStore.upsertBot(body);
+      if (token) await secretStore.write(`telegram:${saved.id}`, token);
       await reconcileChannels(telegramService, wechatService);
       return json(response, 201, await decorateBot(saved, secretStore, telegramService, wechatService), headers);
     }
     const botId = resourceId(path, '/api/bots/');
     if (botId && request.method === 'PUT') {
-      const body = await readJson(request); const saved = await controlPlaneStore.upsertBot({ ...body, id: botId });
-      if (body.telegramToken) await secretStore.write(`telegram:${saved.id}`, body.telegramToken);
+      const body = await readJson(request);
+      const token = await telegramService.validateToken(body.telegramToken);
+      const saved = await controlPlaneStore.upsertBot({ ...body, id: botId });
+      if (token) await secretStore.write(`telegram:${saved.id}`, token);
       await reconcileChannels(telegramService, wechatService);
       return json(response, 200, await decorateBot(saved, secretStore, telegramService, wechatService), headers);
     }
@@ -182,6 +186,15 @@ export function createApiHandler(services) {
       if (!bot) throw Object.assign(new Error('找不到这个 Bot'), { statusCode: 404 });
       return json(response, 200, pairing.create(id), headers);
     }
+    if (path === '/api/telegram/owner-access' && ['GET', 'POST'].includes(request.method)) {
+      const state = await controlPlaneStore.get();
+      const id = request.method === 'POST' ? requiredBotId(await readJson(request)) : requiredQueryBotId(url);
+      const bot = state.bots.find((item) => item.id === id && item.channel.type === 'telegram');
+      if (!bot) throw Object.assign(new Error('找不到这张 Telegram Bot 卡。'), { statusCode: 404 });
+      if (request.method === 'GET') return json(response, 200, await pairing.ownerAccess(bot), headers);
+      const runtime = telegramService.status(state).bots.find((item) => item.botId === id);
+      return json(response, 200, await pairing.startOwnerAccess(bot, runtime?.running ? runtime.username : ''), headers);
+    }
     if (request.method === 'GET' && path === '/api/session/status') {
       return json(response, 200, await manager.status(requiredChatId(url)), headers);
     }
@@ -204,11 +217,14 @@ function resourceId(path, prefix) {
   return id && !id.includes('/') ? id : null;
 }
 
-async function publicControlPlane(state, secretStore, telegramService, wechatService) {
+async function publicControlPlane(state, secretStore, telegramService, wechatService, pairing) {
   return {
     ...state,
     connections: await Promise.all(state.connections.map((item) => decorateConnection(item, secretStore))),
-    bots: await Promise.all(state.bots.map((item) => decorateBot(item, secretStore, telegramService, wechatService, state))),
+    bots: await Promise.all(state.bots.map(async (item) => ({
+      ...await decorateBot(item, secretStore, telegramService, wechatService, state),
+      ...(item.channel.type === 'telegram' ? { telegramAccess: await pairing.ownerAccess(item) } : {}),
+    }))),
   };
 }
 

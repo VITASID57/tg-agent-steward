@@ -64,7 +64,8 @@ async function startLogin(app) {
   $('#wechat-verify-code').value = '';
   $('#wechat-login-start').disabled = true; $('#wechat-login-state').textContent = '正在获取二维码…';
   try {
-    if (!botId) { $('#wechat-login-state').textContent = '正在保存当前设置…'; botId = await ensureBotSaved?.(); }
+    $('#wechat-login-state').textContent = '正在保存当前设置…';
+    botId = await ensureBotSaved?.();
     if (!botId) throw new Error('没有成功保存这张 Bot 卡');
     const revision = loginRevision;
     const result = await api('/api/wechat/login/start', { method: 'POST', body: jsonBody({ botId }) });

@@ -27,6 +27,8 @@
 | GET | `/api/mcp/tools?connectionId=...` | 发现一个 MCP 连接的工具 |
 | GET | `/api/bot-diagnostics?botId=...` | 查看运行模式、唤醒状态、运行时间线、管家注入预览、放行工具和最近用量 |
 | POST | `/api/pairing-code` | Body `{ "botId": "..." }`，生成十分钟一次性配对码 |
+| POST | `/api/telegram/owner-access` | 用已绑定的本人账号授权此 Bot，或生成十分钟有效的私聊绑定链接 |
+| GET | `/api/telegram/owner-access?botId=...` | 查询是否已绑定本人及此 Bot 是否已放行 |
 | POST | `/api/wake/run` | Body `{ "botId": "..." }`，手动触发一次唤醒 |
 | POST | `/api/wake/tick` | 立即执行一次到期检查，主要供运维验证 |
 
