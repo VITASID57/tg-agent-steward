@@ -1,5 +1,6 @@
 import { shouldSendVoice } from '../voice/probability.mjs';
 import { imageRequestPrompt, isExplicitVoiceRequest } from '../media/request-intent.mjs';
+import { WECHAT_SESSION_EXPIRED } from './wechat-client.mjs';
 
 const USER_MESSAGE = 1;
 const TEXT_ITEM = 1;
@@ -15,36 +16,48 @@ export class WechatRuntime {
 
   async start() {
     if (this.controller) return;
-    this.controller = new AbortController();
-    await this.client.notifyStart?.();
-    this.onStatus?.({ running: true, lastError: null });
-    this.#poll(this.controller.signal).catch((error) => {
-      if (!this.controller?.signal.aborted) this.logger.error(`WeChat ${this.botId}: ${safeError(error)}`);
+    const controller = new AbortController();
+    this.controller = controller;
+    this.onStatus?.({ running: false, lastError: null, checking: true });
+    try { await this.client.notifyStart?.(); }
+    catch (error) {
+      if (!controller.signal.aborted) this.logger.warn?.(`WeChat start notification ${this.botId}: ${safeError(error)}`);
+    }
+    this.#poll(controller.signal).catch((error) => {
+      if (!controller.signal.aborted) this.logger.error(`WeChat ${this.botId}: ${safeError(error)}`);
     });
   }
 
   stop() {
-    this.controller?.abort(); this.controller = null;
+    if (!this.controller) return;
+    this.controller.abort(); this.controller = null;
     this.client.notifyStop?.().catch(() => {});
   }
 
   async #poll(signal) {
     let failures = 0;
+    let ready = false;
     while (!signal.aborted) {
       try {
         const saved = await this.#savedState();
         const response = await this.client.getUpdates(saved.syncBuffer || '', signal);
+        if (signal.aborted) return;
+        if (!ready) {
+          ready = true;
+          this.onStatus?.({ running: true, lastError: null });
+          await this.eventStore?.record(this.botId, { kind: 'channel', status: 'success', title: '微信 Bot 已启动', detail: '消息轮询已连接。' });
+        }
         for (const message of response.msgs || []) await this.#message(message, signal);
         if (response.get_updates_buf !== undefined) await this.#save({ syncBuffer: response.get_updates_buf });
         failures = 0;
       } catch (error) {
         if (signal.aborted || error.name === 'AbortError' || error.name === 'TimeoutError') continue;
-        if (Number(error.code) === -14) {
-          const detail = '微信没有放行这次登录，会话已失效。若手机显示“运行环境存在风险”，这是微信上游限制，请先暂停重复扫码。';
+        if (Number(error.code) === WECHAT_SESSION_EXPIRED) {
+          const detail = '微信返回会话已失效（-14），请重新获取二维码并在微信确认。';
           this.logger.error(`WeChat polling ${this.botId}: ${detail}`);
           await this.#save({ syncBuffer: '' });
-          this.onStatus?.({ running: false, lastError: detail });
-          await this.eventStore?.record(this.botId, { kind: 'channel', status: 'error', title: '微信登录未获放行', detail });
+          this.onStatus?.({ running: false, lastError: detail, sessionExpired: true });
+          await this.eventStore?.record(this.botId, { kind: 'channel', status: 'error', title: '微信会话已失效', detail });
           break;
         }
         failures += 1; this.logger.error(`WeChat polling ${this.botId}: ${safeError(error)}`);

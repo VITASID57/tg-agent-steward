@@ -6,6 +6,7 @@ const DEFAULT_BASE_URL = 'https://ilinkai.weixin.qq.com';
 const DEFAULT_CDN_BASE_URL = 'https://novac2c.cdn.weixin.qq.com/c2c';
 const CHANNEL_VERSION = '2.4.10';
 const COMMON_HEADERS = Object.freeze({ 'iLink-App-Id': 'bot', 'iLink-App-ClientVersion': '132106' });
+export const WECHAT_SESSION_EXPIRED = -14;
 
 export class WechatClient {
   constructor({ token, baseUrl = DEFAULT_BASE_URL, cdnBaseUrl = DEFAULT_CDN_BASE_URL, fetchImpl = fetch }) {
@@ -83,17 +84,14 @@ export class WechatClient {
     const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
     const response = await this.fetch(new URL(endpoint, `${this.baseUrl}/`), {
       method: 'POST', signal: combined, body,
-      headers: {
-        'content-type': 'application/json', 'authorization-type': 'ilink_bot_token',
-        authorization: `Bearer ${this.token}`, 'x-wechat-uin': randomWechatUin(), ...COMMON_HEADERS,
-      },
+      headers: { ...postHeaders(), authorization: `Bearer ${this.token}` },
     });
     const payload = await response.text();
     if (!response.ok) throw new Error(`微信通道请求失败（${response.status}）`);
     const parsed = parseJson(payload);
-    if ((parsed.ret && parsed.ret !== 0) || (parsed.errcode && parsed.errcode !== 0)) {
-      const code = Number(parsed.errcode || parsed.ret);
-      const error = new Error(code === -14 ? '微信没有放行这次登录，会话已失效。若手机显示“运行环境存在风险”，这是微信上游限制，请先暂停重复扫码。'
+    const code = Number(parsed.errcode) || Number(parsed.ret) || 0;
+    if (code) {
+      const error = new Error(code === WECHAT_SESSION_EXPIRED ? '微信返回会话已失效（-14），请重新获取二维码并在微信确认。'
         : `微信通道返回错误：${parsed.errmsg || parsed.ret || parsed.errcode}`);
       error.code = code;
       throw error;
@@ -115,7 +113,7 @@ export async function requestWechatQr(fetchImpl = fetch) {
   url.searchParams.set('bot_type', '3');
   const response = await fetchImpl(url, {
     method: 'POST', body: JSON.stringify({ local_token_list: [] }),
-    headers: { 'content-type': 'application/json', ...COMMON_HEADERS },
+    headers: postHeaders(), signal: AbortSignal.timeout(12_000),
   });
   const payload = parseJson(await response.text());
   if (!response.ok || !payload.qrcode || !payload.qrcode_img_content) throw new Error('暂时没有拿到微信登录二维码');
@@ -126,7 +124,12 @@ export async function pollWechatQr(code, fetchImpl = fetch, options = {}) {
   const url = new URL('/ilink/bot/get_qrcode_status', options.baseUrl || DEFAULT_BASE_URL);
   url.searchParams.set('qrcode', code);
   if (options.verifyCode) url.searchParams.set('verify_code', options.verifyCode);
-  const response = await fetchImpl(url, { headers: { ...COMMON_HEADERS } });
+  const timeout = AbortSignal.timeout(25_000);
+  const response = await fetchImpl(url, { headers: { ...COMMON_HEADERS }, signal: timeout }).catch((error) => {
+    if (timeout.aborted) return null;
+    throw error;
+  });
+  if (!response || response.status >= 500) return { status: 'poll-timeout' };
   const payload = parseJson(await response.text());
   if (!response.ok) throw new Error('微信扫码状态查询失败');
   if (payload.status !== 'confirmed') return {
@@ -139,7 +142,7 @@ export async function pollWechatQr(code, fetchImpl = fetch, options = {}) {
     status: 'confirmed',
     account: {
       token: payload.bot_token,
-      baseUrl: safeBaseUrl(payload.baseurl || DEFAULT_BASE_URL),
+      baseUrl: safeBaseUrl(payload.baseurl || options.baseUrl || DEFAULT_BASE_URL),
       cdnBaseUrl: safeBaseUrl(payload.cdnbaseurl || DEFAULT_CDN_BASE_URL),
       accountId: String(payload.ilink_bot_id),
       userId: String(payload.ilink_user_id || ''),
@@ -148,6 +151,11 @@ export async function pollWechatQr(code, fetchImpl = fetch, options = {}) {
 }
 
 function baseInfo() { return { channel_version: CHANNEL_VERSION, bot_agent: 'Lumenkeep/0.4.0' }; }
+
+function postHeaders() {
+  return { 'content-type': 'application/json', AuthorizationType: 'ilink_bot_token',
+    'x-wechat-uin': randomWechatUin(), ...COMMON_HEADERS };
+}
 
 function randomWechatUin() {
   return Buffer.from(String(randomBytes(4).readUInt32BE(0))).toString('base64');

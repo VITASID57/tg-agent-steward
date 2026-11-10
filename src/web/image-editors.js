@@ -25,7 +25,7 @@ function imageRouteCard(app, route = {}) {
   options($('.image-route-connection', node), imageConnections.map(named), route.connectionId);
   $('.image-route-size', node).value = route.size || '';
   $('.image-route-options', node).value = Object.keys(route.options || {}).length ? JSON.stringify(route.options, null, 2) : '';
-  const loadImageModels = () => loadModelPicker({ select: $('.image-route-model', node),
+  const loadImageModels = (verify = false) => loadModelPicker({ select: $('.image-route-model', node), verify,
     connectionId: $('.image-route-connection', node).value, purpose: 'image',
     selected: $('.image-route-model', node).value || route.model || '', button: $('.image-route-model-refresh', node),
     status: $('.image-route-model-status', node), emptyLabel: '由连接自动选择' });

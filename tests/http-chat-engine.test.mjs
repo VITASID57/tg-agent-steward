@@ -41,17 +41,22 @@ test('Vertex connection can use an OAuth bearer token', async () => {
   assert.equal(authorization, 'Bearer oauth-token');
 });
 
-test('Vertex model catalog uses the official regional Model Garden list endpoint', async () => {
-  let requested = '';
+test('Vertex OAuth follows regional publisher catalog pagination without mixing built-in candidates', async () => {
+  const requested = [];
   const engine = new HttpChatEngine({ connection: { id: 'vertex', kind: 'vertex-ai',
-    baseUrl: 'https://aiplatform.googleapis.com/v1/projects/project-1/locations/global/publishers/google', cachedModels: [], options: {} },
-  secret: 'google-key', sessions: sessions(), fetchImpl: async (url) => {
-    requested = String(url); return Response.json({ publisherModels: [{ name: 'publishers/google/models/gemini-2.5-flash', displayName: 'Gemini Flash' }] });
+    baseUrl: 'https://aiplatform.googleapis.com/v1/projects/project-1/locations/global/publishers/google', cachedModels: [], options: { authStyle: 'bearer' } },
+  secret: 'oauth', sessions: sessions(), fetchImpl: async (url, init) => {
+    assert.equal(init.headers.Authorization, 'Bearer oauth');
+    requested.push(String(url));
+    return requested.length === 1
+      ? Response.json({ publisherModels: [{ name: 'publishers/google/models/gemini-3.8-flash' }], nextPageToken: 'page2' })
+      : Response.json({ publisherModels: [{ name: 'publishers/google/models/gemini-4-argon' }, { name: 'publishers/google/models/gemini-3.8-flash-tts' }] });
   } });
   const result = await engine.capabilities({ purpose: 'chat' });
-  assert.equal(result.source, 'live'); assert.equal(result.models[0].id, 'gemini-2.5-flash');
-  assert.ok(result.models.some((item) => item.id === 'gemini-4-argon'));
-  assert.equal(requested, 'https://us-central1-aiplatform.googleapis.com/v1beta1/publishers/google/models?listAllVersions=false');
+  assert.equal(result.source, 'live');
+  assert.deepEqual(result.models.map(({ id }) => id), ['gemini-3.8-flash', 'gemini-4-argon']);
+  assert.equal(requested[0], 'https://us-central1-aiplatform.googleapis.com/v1/publishers/google/models?listAllVersions=false&pageSize=100');
+  assert.match(requested[1], /pageToken=page2/u);
 });
 
 test('Vertex fallback exposes current Gemini models with valid Argon thinking levels', async () => {
@@ -62,19 +67,31 @@ test('Vertex fallback exposes current Gemini models with valid Argon thinking le
   const argon = result.models.find((item) => item.id === 'gemini-4-argon');
   assert.equal(result.source, 'built-in');
   assert.deepEqual(argon.efforts, ['low', 'medium', 'high']);
-  assert.match(result.liveError, /401/u);
+  assert.match(result.catalogNote, /重新拉取/u);
 });
 
-test('Vertex API-key catalog restriction is explained without marking generation unavailable', async () => {
+test('Vertex API-key refresh verifies candidates with CountTokens on the saved project endpoint', async () => {
+  const checked = [];
   const engine = new HttpChatEngine({ connection: { id: 'vertex', kind: 'vertex-ai',
-    baseUrl: 'https://aiplatform.googleapis.com/v1/projects/project-1/locations/global/publishers/google', cachedModels: [], options: {} },
-  secret: 'working-generation-key', sessions: sessions(), fetchImpl: async () => Response.json({ error: {
-    message: 'API keys are not supported by this API. Expected OAuth2 access token',
-  } }, { status: 401 }) });
-  const result = await engine.capabilities({ purpose: 'chat' });
-  assert.equal(result.available, true);
-  assert.equal(result.source, 'built-in');
-  assert.match(result.catalogNote, /API Key 仍可用于模型调用/u);
+    baseUrl: 'https://aiplatform.googleapis.com/v1/projects/project-1/locations/global/publishers/google/models/old:generateContent',
+    cachedModels: ['gemini-2.5-pro', 'gemini-custom-preview', 'claude-fable-5-2', 'gemini-3.8-flash-tts'], options: {} },
+  secret: 'working-key', sessions: sessions(), fetchImpl: async (url, init) => {
+    assert.match(url, /projects\/project-1\/locations\/global\/publishers\/google\/models\/[^/]+:countTokens$/u);
+    assert.equal(init.headers['x-goog-api-key'], 'working-key');
+    const model = /\/models\/([^:]+)/u.exec(url)[1];
+    checked.push(model);
+    return ['gemini-4-carbon', 'gemini-custom-preview'].includes(model)
+      ? Response.json({ totalTokens: 1 }) : Response.json({}, { status: 404 });
+  } });
+  const initial = await engine.capabilities({ purpose: 'chat' });
+  assert.equal(initial.source, 'built-in');
+  assert.deepEqual(checked, []);
+  assert.match(initial.catalogNote, /API Key 不能列举/u);
+  const result = await engine.capabilities({ purpose: 'chat', verify: true });
+  assert.equal(result.source, 'verified');
+  assert.deepEqual(result.models.map(({ id }) => id), ['gemini-4-carbon', 'gemini-custom-preview']);
+  assert.ok(checked.includes('gemini-2.5-pro'));
+  assert.ok(!checked.includes('claude-fable-5-2') && !checked.includes('gemini-3.8-flash-tts'));
 });
 
 test('ElevenLabs voice catalog is pulled and filtered for text to speech', async () => {

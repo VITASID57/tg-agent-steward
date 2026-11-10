@@ -44,6 +44,7 @@ test('wechat client sends the official iLink text envelope without exposing the 
   assert.equal(body.msg.context_token, 'context-token');
   assert.equal(body.msg.item_list[0].text_item.text, 'hello');
   assert.equal(request.options.headers.authorization, 'Bearer super-secret');
+  assert.equal(request.options.headers.AuthorizationType, 'ilink_bot_token');
   assert.equal(request.options.headers['iLink-App-ClientVersion'], '132106');
   assert.equal(body.base_info.channel_version, '2.4.10');
 });
@@ -61,7 +62,7 @@ test('wechat client announces channel start and stop', async () => {
 
 test('wechat client turns an expired iLink session into an actionable error', async () => {
   const client = new WechatClient({ token: 'expired', fetchImpl: async () => response({ errcode: -14, errmsg: 'session timeout' }) });
-  await assert.rejects(() => client.getUpdates(), (error) => error.code === -14 && /上游限制/u.test(error.message));
+  await assert.rejects(() => client.getUpdates(), (error) => error.code === -14 && /会话已失效/u.test(error.message));
 });
 
 test('wechat client starts and stops the official typing indicator', async () => {

@@ -1,4 +1,4 @@
-import { pollWechatQr, requestWechatQr } from './wechat-client.mjs';
+import { pollWechatQr, requestWechatQr, WECHAT_SESSION_EXPIRED } from './wechat-client.mjs';
 
 export class WechatService {
   constructor({ controlPlaneStore, secretStore, createRuntime, stateFile = null, eventStore = null, fetchImpl = fetch }) {
@@ -22,18 +22,19 @@ export class WechatService {
         this.#stop(bot.id); this.states.set(bot.id, status(bot, Boolean(account), false, null)); continue;
       }
       wanted.add(bot.id);
+      if (this.states.get(bot.id)?.sessionExpired) continue;
       if (this.runtimes.has(bot.id)) {
-        if (!this.states.get(bot.id)?.lastError) this.states.set(bot.id, status(bot, true, true, null));
+        const current = this.states.get(bot.id);
+        if (current) this.states.set(bot.id, { ...current, name: bot.name });
         continue;
       }
       const runtime = this.createRuntime(bot.id, account, (patch) => {
-        this.states.set(bot.id, status(bot, true, patch.running, patch.lastError));
+        this.states.set(bot.id, status(bot, true, patch.running, patch.lastError, patch.sessionExpired, patch.checking));
       });
       try {
-        await runtime.start(); this.runtimes.set(bot.id, runtime); this.states.set(bot.id, status(bot, true, true, null));
-        await this.eventStore?.record(bot.id, { kind: 'channel', status: 'success', title: '微信 Bot 已启动', detail: '消息轮询已连接。' });
+        await runtime.start(); this.runtimes.set(bot.id, runtime);
       } catch (error) {
-        runtime.stop(); this.states.set(bot.id, status(bot, true, false, error.message));
+        runtime.stop(); this.states.set(bot.id, status(bot, true, false, error.message, error.code === WECHAT_SESSION_EXPIRED));
         await this.eventStore?.record(bot.id, { kind: 'channel', status: 'error', title: '微信 Bot 启动失败', detail: error.message });
       }
     }
@@ -44,24 +45,35 @@ export class WechatService {
   async beginLogin(botId) {
     await this.#assertWechatBot(botId);
     const qr = await requestWechatQr(this.fetch);
-    this.logins.set(botId, { code: qr.code, createdAt: Date.now(), baseUrl: null, verifyCode: null });
+    this.logins.set(botId, { code: qr.code, createdAt: Date.now(), baseUrl: null, verifyCode: null, status: 'waiting' });
     return { status: 'waiting', image: qr.image, expiresInSeconds: 300 };
   }
 
   async loginStatus(botId) {
     await this.#assertWechatBot(botId);
     const pending = this.logins.get(botId);
-    if (!pending) return { status: await this.secretStore.has(`wechat:${botId}`) ? 'connected' : 'idle' };
+    if (!pending) return this.#loginResult(botId);
     if (Date.now() - pending.createdAt > 300_000) {
       this.logins.delete(botId); return { status: 'expired' };
     }
+    pending.poll ??= this.#pollLogin(botId, pending).finally(() => { pending.poll = null; });
+    return pending.poll;
+  }
+
+  async #pollLogin(botId, pending) {
     const result = await pollWechatQr(pending.code, this.fetch, { baseUrl: pending.baseUrl, verifyCode: pending.verifyCode });
+    if (this.logins.get(botId) !== pending) return { status: this.logins.get(botId)?.status || 'idle' };
+    if (result.status === 'poll-timeout') return { status: pending.status };
     if (result.baseUrl) pending.baseUrl = result.baseUrl;
     if (result.status === 'binded_redirect' && await this.secretStore.has(`wechat:${botId}`)) {
-      this.logins.delete(botId); await this.reconcile(); return { status: 'connected' };
+      this.logins.delete(botId); await this.reconcile(); return this.#loginResult(botId);
     }
     if (result.status === 'expired') this.logins.delete(botId);
-    if (result.status !== 'confirmed') return { status: qrStatus(result.status) };
+    if (result.status !== 'confirmed') {
+      pending.status = qrStatus(result.status);
+      if (pending.status === 'needs-verification') pending.verifyCode = null;
+      return { status: pending.status };
+    }
     await this.secretStore.write(`wechat:${botId}`, JSON.stringify(result.account));
     await this.stateFile?.update((state = { bots: {} }) => ({
       ...state, bots: { ...(state.bots || {}), [botId]: {} },
@@ -71,9 +83,18 @@ export class WechatService {
       await this.controlPlaneStore.upsertBot({ ...bot, wechat: { ...bot.wechat,
         allowedUserIds: [...new Set([...(bot.wechat?.allowedUserIds || []), String(result.account.userId)])] } });
     }
-    this.logins.delete(botId); this.#stop(botId);
+    this.logins.delete(botId); this.#stop(botId); this.states.delete(botId);
     await this.reconcile();
-    return { status: 'connected' };
+    return this.#loginResult(botId);
+  }
+
+  async #loginResult(botId) {
+    const saved = this.states.get(botId);
+    if (saved?.running) return { status: 'connected' };
+    if (saved?.sessionExpired) return { status: 'session-expired' };
+    if (saved?.lastError) return { status: 'start-failed' };
+    if (saved?.checking) return { status: 'starting' };
+    return { status: await this.secretStore.has(`wechat:${botId}`) ? 'saved-not-running' : 'idle' };
   }
 
   async submitVerifyCode(botId, code) {
@@ -101,7 +122,8 @@ export class WechatService {
   }
 
   async proactive(botId, userId, prompt, context = {}) {
-    const runtime = this.runtimes.get(botId); if (!runtime) throw new Error('Bot 当前没有运行');
+    const runtime = this.runtimes.get(botId);
+    if (!runtime || !this.states.get(botId)?.running) throw new Error('Bot 当前没有运行');
     return runtime.proactive(userId, prompt, context);
   }
 
@@ -126,12 +148,12 @@ export class WechatService {
   #stop(id) { this.runtimes.get(id)?.stop(); this.runtimes.delete(id); }
 }
 
-function status(bot, configured, running, lastError) {
-  return { botId: bot.id, name: bot.name, channel: 'wechat-clawbot', configured, enabled: bot.enabled, running, lastError };
+function status(bot, configured, running, lastError, sessionExpired = false, checking = false) {
+  return { botId: bot.id, name: bot.name, channel: 'wechat-clawbot', configured, enabled: bot.enabled, running, lastError, sessionExpired, checking };
 }
 
 function qrStatus(value) {
   return ({ wait: 'waiting', scaned: 'scanned', scaned_but_redirect: 'scanned',
-    need_verifycode: 'needs-verification', verify_code_blocked: 'verification-blocked',
+    need_verifycode: 'needs-verification', confirmed_but_need_verifycode: 'needs-verification', verify_code_blocked: 'verification-blocked',
     binded_redirect: 'already-bound' })[value] || value;
 }

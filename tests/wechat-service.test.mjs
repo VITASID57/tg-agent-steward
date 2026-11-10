@@ -44,8 +44,36 @@ test('confirmed QR login stores the account privately and authorizes the scanner
   const start = await service.beginLogin('wx');
   const result = await service.loginStatus('wx');
   assert.deepEqual(start, { status: 'waiting', image: 'https://example.test/qr.png', expiresInSeconds: 300 });
-  assert.deepEqual(result, { status: 'connected' });
+  assert.deepEqual(result, { status: 'saved-not-running' });
   assert.match(secrets.values['wechat:wx'], /private-token/u);
   assert.deepEqual(bot.wechat.allowedUserIds, ['scanner-1']);
   assert.equal(JSON.stringify(result).includes('private-token'), false);
+});
+
+test('WeChat PIN and redirected confirmation report session expiry when start is rejected', async () => {
+  let bot = { id: 'wx', enabled: true, channel: { type: 'wechat-clawbot' }, wechat: { allowedUserIds: [] } };
+  const secret = secretStore();
+  const redirect = 'ilink.example.test';
+  const service = new WechatService({
+    controlPlaneStore: { async get() { return { bots: [bot] }; }, async upsertBot(value) { bot = value; return value; } },
+    secretStore: secret,
+    fetchImpl: async (url) => {
+      if (url.pathname.includes('get_bot_qrcode')) return Response.json({ qrcode: 'qr', qrcode_img_content: 'https://example.test/qr.png' });
+      if (url.hostname !== redirect) return Response.json({ status: 'scaned_but_redirect', redirect_host: redirect });
+      if (!url.searchParams.has('verify_code')) return Response.json({ status: 'confirmed_but_need_verifycode' });
+      assert.equal(url.searchParams.get('verify_code'), '123456');
+      return Response.json({ status: 'confirmed', bot_token: 'secret', ilink_bot_id: 'account' });
+    },
+    createRuntime: (_id, account) => ({
+      async start() { assert.equal(account.baseUrl, `https://${redirect}`); throw Object.assign(new Error('expired'), { code: -14 }); },
+      stop() {},
+    }),
+  });
+  await service.beginLogin('wx');
+  assert.deepEqual(await service.loginStatus('wx'), { status: 'scanned' });
+  assert.deepEqual(await service.loginStatus('wx'), { status: 'needs-verification' });
+  await service.submitVerifyCode('wx', '123456');
+  assert.deepEqual(await service.loginStatus('wx'), { status: 'session-expired' });
+  assert.deepEqual(await service.loginStatus('wx'), { status: 'session-expired' });
+  assert.equal(await secret.has('wechat:wx'), true);
 });

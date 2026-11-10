@@ -1,10 +1,10 @@
-import { $ } from './dom.js';
+import { $, csv } from './dom.js';
 import { bindModelRefresh, loadModelPicker } from './model-picker.js';
 
 let currentConnection = null;
 
 export function bindConnectionCatalog() {
-  bindModelRefresh($('#connection-model-refresh'), () => refreshConnectionCatalog(currentConnection));
+  bindModelRefresh($('#connection-model-refresh'), (verify) => refreshConnectionCatalog(currentConnection, verify));
 }
 
 export function fillConnectionCatalog(connection) {
@@ -13,19 +13,24 @@ export function fillConnectionCatalog(connection) {
   refreshConnectionCatalog(currentConnection);
 }
 
-async function refreshConnectionCatalog(connection) {
+async function refreshConnectionCatalog(connection, verify = false) {
   const draft = draftConnection(connection); const purpose = primaryPurpose(draft);
-  await loadModelPicker({
-    select: $('#connection-model-catalog'), connectionId: connection?.id, purpose, preview: draft,
+  const result = await loadModelPicker({
+    select: $('#connection-model-catalog'), connectionId: connection?.id, purpose, preview: draft, verify,
     button: $('#connection-model-refresh'), status: $('#connection-model-status'), emptyLabel: '由连接自动选择',
-    onLoaded: (result) => { if (result.models?.length) $('#connection-models').value = result.models.map((item) => item.id).join(', '); },
+    onLoaded: (result) => {
+      if (result.models?.length && (draft.kind !== 'vertex-ai' || (result.source === 'verified' && !result.liveError))) {
+        $('#connection-models').value = result.models.map((item) => item.id).join(', ');
+      }
+    },
   });
+  if (!result || currentConnection !== connection) return;
   if (!draft.capabilities?.includes('stt')) {
     $('#connection-stt-model').replaceChildren(new Option('这类连接不使用语音识别模型', ''));
     $('#connection-stt-model').disabled = true;
     return;
   }
-  await loadModelPicker({ select: $('#connection-stt-model'), connectionId: connection?.id, preview: draft, purpose: 'stt',
+  await loadModelPicker({ select: $('#connection-stt-model'), connectionId: connection?.id, preview: draft, purpose: 'stt', verify,
     selected: connection?.options?.transcriptionModel || '', emptyLabel: '由连接自动选择' });
 }
 
@@ -34,7 +39,7 @@ function draftConnection(connection) {
   return {
     id: connection?.id || '', name: $('#connection-name').value || connection?.name || '临时连接', kind,
     baseUrl: $('#connection-url').value, secret: $('#connection-secret').value,
-    cachedModels: connection?.cachedModels || [], capabilities: capabilities(kind),
+    cachedModels: csv($('#connection-models').value), capabilities: capabilities(kind),
     options: { ...(connection?.options || {}), apiStyle: $('#connection-api-style').value,
       groupId: $('#connection-group-id').value, authType: $('#connection-auth-type').value,
       authName: $('#connection-auth-name').value },

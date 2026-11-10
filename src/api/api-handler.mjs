@@ -138,7 +138,7 @@ export function createApiHandler(services) {
       const connection = state.connections.find((item) => item.id === id) ?? state.connections.find((item) => item.kind === url.searchParams.get('engine')) ?? state.connections[0];
       if (!connection) throw Object.assign(new Error('请先保存连接预设'), { statusCode: 409 });
       const purpose = ['chat', 'tts', 'stt', 'image'].includes(url.searchParams.get('purpose')) ? url.searchParams.get('purpose') : 'chat';
-      return json(response, 200, await engines.capabilityFor(connection, { purpose }), headers);
+      return json(response, 200, await engines.capabilityFor(connection, { purpose, verify: url.searchParams.get('verify') === '1' }), headers);
     }
     if (request.method === 'POST' && path === '/api/models/preview') {
       const raw = await readJson(request); const prepared = prepareConnectionInput(raw.connection || raw);
@@ -147,7 +147,7 @@ export function createApiHandler(services) {
       if (!connection) throw Object.assign(new Error('请选择连接类型'), { statusCode: 400 });
       const savedSecret = prepared.secret || (prepared.body.id ? await secretStore.read(`connection:${prepared.body.id}`) : '');
       const purpose = ['chat', 'tts', 'stt', 'image'].includes(raw.purpose) ? raw.purpose : 'chat';
-      return json(response, 200, await engines.capabilityForDraft(connection, savedSecret || '', { purpose }), headers);
+      return json(response, 200, await engines.capabilityForDraft(connection, savedSecret || '', { purpose, verify: raw.verify === true }), headers);
     }
     if (request.method === 'GET' && path === '/api/mcp/tools') {
       const connectionId = url.searchParams.get('connectionId'); if (!connectionId) throw Object.assign(new Error('缺少 connectionId'), { statusCode: 400 });

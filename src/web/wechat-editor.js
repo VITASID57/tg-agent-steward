@@ -4,7 +4,20 @@ import { refreshBotSections } from './bot-sections.js';
 
 let pollTimer = null;
 let pollBusy = false;
+let loginRevision = 0;
 let ensureBotSaved = null;
+const loginLabels = {
+  waiting: '等待扫码', scanned: '已扫码，请在微信确认', expired: '二维码已过期',
+  connected: '微信已连接，Bot 已启动', idle: '扫码已结束，请重新获取二维码',
+  starting: '微信已授权，正在检查消息连接…',
+  'needs-verification': '请填写手机微信显示的数字',
+  'verification-blocked': '数字校验暂时被限制，请重新获取二维码',
+  'already-bound': '微信报告已有绑定，请在微信 ClawBot 中检查原连接',
+  'saved-not-running': '微信已授权，启用 Bot 后才会开始接收消息',
+  'session-expired': '微信返回会话已失效（-14），请重新获取二维码并在微信确认',
+  'start-failed': '微信已授权，但 Bot 启动失败。请查看运行状态',
+};
+const pendingStates = new Set(['waiting', 'scanned', 'needs-verification', 'starting']);
 
 export function bindWechatEditor(app, saveDraft) {
   ensureBotSaved = saveDraft;
@@ -17,6 +30,7 @@ export function bindWechatEditor(app, saveDraft) {
 
 export function fillWechatEditor(item) {
   clearPolling();
+  $('#wechat-verify-code').value = '';
   $('#wechat-login-box').hidden = true;
   $('#wechat-verify-box').hidden = true;
   $('#wechat-login-start').disabled = false;
@@ -46,31 +60,46 @@ async function createWechatPairCode() {
 async function startLogin(app) {
   let botId = $('#bot-id').value;
   clearPolling();
+  $('#wechat-verify-box').hidden = true;
+  $('#wechat-verify-code').value = '';
   $('#wechat-login-start').disabled = true; $('#wechat-login-state').textContent = '正在获取二维码…';
   try {
     if (!botId) { $('#wechat-login-state').textContent = '正在保存当前设置…'; botId = await ensureBotSaved?.(); }
     if (!botId) throw new Error('没有成功保存这张 Bot 卡');
+    const revision = loginRevision;
     const result = await api('/api/wechat/login/start', { method: 'POST', body: jsonBody({ botId }) });
+    if (revision !== loginRevision) return;
     $('#wechat-qr-image').src = result.image; $('#wechat-login-box').hidden = false;
     $('#wechat-login-state').textContent = '等待扫码';
-    pollTimer = setInterval(() => pollLogin(app, botId), 2000);
+    pollTimer = setInterval(() => pollLogin(app, botId, revision), 2000);
   } catch (error) { toast(error.message, true); }
   finally { $('#wechat-login-start').disabled = false; }
 }
 
-async function pollLogin(app, botId) {
+async function pollLogin(app, botId, revision) {
   if (pollBusy) return;
   pollBusy = true;
   try {
     const result = await api(`/api/wechat/login/status?botId=${encodeURIComponent(botId)}`);
-    const labels = { waiting: '等待扫码', scanned: '已扫码，请在微信确认', expired: '二维码已过期', connected: '微信已连接', idle: '尚未开始扫码',
-      'needs-verification': '请填写手机微信显示的数字', 'verification-blocked': '数字校验暂时被限制，请重新获取二维码', 'already-bound': '这个微信已绑定过；请先在原连接解除' };
-    $('#wechat-login-state').textContent = labels[result.status] || result.status;
+    if (revision !== loginRevision) return;
+    const label = loginLabels[result.status] || '微信返回未知扫码状态，请重新获取二维码';
+    $('#wechat-login-state').textContent = label;
     $('#wechat-verify-box').hidden = result.status !== 'needs-verification';
-    if (result.status === 'connected') { clearPolling(); toast('微信账号已连接'); await app.reload(); }
-    if (result.status === 'expired') clearPolling();
-  } catch (error) { clearPolling(); toast(error.message, true); }
-  finally { pollBusy = false; }
+    if (!pendingStates.has(result.status)) {
+      clearPolling();
+      if (result.status === 'connected' || result.status === 'saved-not-running') {
+        toast(label);
+        await app.reload();
+      } else if (result.status === 'session-expired' || result.status === 'start-failed') {
+        $('#bot-runtime-state').textContent = label;
+        $('#wechat-disconnect').disabled = false;
+      }
+    }
+  } catch (error) {
+    if (revision !== loginRevision) return;
+    clearPolling();
+    $('#wechat-login-state').textContent = error.message;
+  } finally { if (revision === loginRevision) pollBusy = false; }
 }
 
 async function submitVerifyCode() {
@@ -91,4 +120,5 @@ async function disconnect(app) {
 function clearPolling() {
   if (pollTimer) clearInterval(pollTimer);
   pollTimer = null; pollBusy = false;
+  loginRevision += 1;
 }

@@ -37,6 +37,11 @@ Bot 的 `tools.disabledByConnection` 按连接 ID 保存关闭的工具名数组
 `tools.allowedToolNames` 白名单同时生效。Telegram 使用
 `voice.telegramSendTextWithVoice` 选择是否同时发正文，默认关闭。
 
+Vertex 使用 API Key 时，常规模型请求展示按用途整理的候选。给 `GET /api/models`
+加 `verify=1`，或给 `POST /api/models/preview` 加 `"verify": true`，即可在当前
+连接上用免费 `countTokens` 检查候选。返回的 `source: "verified"` 表示通过
+计数接口的模型，生成权限和配额以实际请求为准。OAuth 连接可读取 Google 发布者目录。
+
 连接自检结果会写回连接的 `lastTest`。实时目录或 CLI 可用时返回 `passed`；只有保存／
 内置目录或缺少统一安全探测接口时返回 `warning`；缺少必要字段或连接失败时返回
 `failed`。Bot 时间线最多保留最近 80 条运行元数据，错误会脱敏，不保存用户消息或

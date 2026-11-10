@@ -42,8 +42,8 @@ export function bindEditors(app) {
   $('#delete-bot').onclick = () => removeBot(app);
   $('#pair-button').onclick = () => pair(app);
   $('#bot-chat-connection').onchange = () => loadModels('', '');
-  $('#bot-model').onchange = () => updateBotEfforts();
-  bindModelRefresh($('#bot-model-refresh'), loadModels);
+  $('#bot-model').onchange = () => updateBotEfforts('');
+  bindModelRefresh($('#bot-model-refresh'), (verify) => loadModels(undefined, undefined, verify));
   $('#bot-voice-probability').oninput = showProbability;
   $('#bot-sticker-probability').oninput = showStickerProbability;
   $('#bot-wake-mode').onchange = showWakeSchedule;
@@ -241,16 +241,16 @@ async function pair() {
 }
 
 let botCatalog = { models: [], efforts: [] };
-async function loadModels(selected = $('#bot-model').value, selectedEffort = $('#bot-effort').value) {
+async function loadModels(selected = $('#bot-model').value, selectedEffort = $('#bot-effort').value, verify = false) {
   const connectionId = $('#bot-chat-connection').value;
-  await loadModelPicker({ select: $('#bot-model'), connectionId, purpose: 'chat', selected,
+  await loadModelPicker({ select: $('#bot-model'), connectionId, purpose: 'chat', selected, verify,
     button: $('#bot-model-refresh'), status: $('#bot-model-status'), emptyLabel: '后端默认模型',
     onLoaded: (result) => { botCatalog = result; updateBotEfforts(selectedEffort); } });
 }
 function updateBotEfforts(explicit = null) {
   const selected = $('#bot-model').value; const current = explicit ?? $('#bot-effort').value;
   const model = botCatalog.models?.find((item) => item.id === selected);
-  const efforts = model?.efforts?.length ? model.efforts : (botCatalog.efforts || []);
+  const efforts = model?.efforts ?? botCatalog.efforts ?? [];
   const items = efforts.map((value) => ({ value, label: value }));
   if (current && !items.some((item) => item.value === current)) items.unshift({ value: current, label: `${current}（当前保存）` });
   options($('#bot-effort'), items, current, '后端默认');
@@ -291,7 +291,7 @@ function routeCard(app, route = {}) {
     $('.route-expression', node).classList.toggle('supported', supported);
     $('.route-reference-fields', node).hidden = connection?.kind !== 'gpt-sovits';
   };
-  const loadVoiceModels = () => loadModelPicker({ select: $('.route-model', node), connectionId: $('.route-connection', node).value,
+  const loadVoiceModels = (verify = false) => loadModelPicker({ select: $('.route-model', node), connectionId: $('.route-connection', node).value, verify,
     purpose: 'tts', selected: $('.route-model', node).value || route.model || '', button: $('.route-model-refresh', node),
     status: $('.route-model-status', node), emptyLabel: '由连接自动选择', onLoaded: updateExpression });
   $('.route-connection', node).addEventListener('change', () => { route.model = ''; $('.route-model', node).value = ''; loadVoiceModels(); });

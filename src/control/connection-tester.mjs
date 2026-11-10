@@ -27,9 +27,15 @@ export class ConnectionTester {
       return report('passed', 'MCP 连接可用', `已连通，并读取到 ${tools.length} 个工具。`);
     }
     if (connection.capabilities.includes('chat') || CLI_KINDS.has(connection.kind) || ['elevenlabs', 'comfyui'].includes(connection.kind)) {
-      const capability = await this.engines.capabilityFor(connection, { purpose: primaryPurpose(connection) });
+      const capability = await this.engines.capabilityFor(connection, {
+        purpose: primaryPurpose(connection), verify: connection.kind === 'vertex-ai',
+      });
       if (!capability.available) return report('failed', '连接不可用', capability.error || '提供方没有返回可用能力。');
       const modelCount = Array.isArray(capability.models) ? capability.models.length : 0;
+      if (capability.source === 'verified') {
+        return modelCount ? report('passed', 'Vertex 已通过实时检查', `${modelCount} 个模型通过免费 token 计数。实际生成权限以调用为准。`)
+          : report('warning', 'Vertex 未通过模型检查', capability.catalogNote || '没有候选模型通过 token 计数。');
+      }
       if (CLI_KINDS.has(connection.kind) || LIVE_SOURCES.has(capability.source)) {
         return report('passed', '连接已通过实时自检', modelCount ? `运行入口可用，并读取到 ${modelCount} 个模型。` : '运行入口可用。');
       }

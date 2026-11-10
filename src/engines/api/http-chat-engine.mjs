@@ -1,3 +1,5 @@
+import { vertexCapabilities, vertexModelTarget } from './vertex-models.mjs';
+
 const TIMEOUT_MS = 5 * 60_000;
 
 export class HttpChatEngine {
@@ -10,24 +12,21 @@ export class HttpChatEngine {
     this.active = new Map();
   }
 
-  async capabilities({ purpose = 'chat' } = {}) {
+  async capabilities({ purpose = 'chat', verify = false } = {}) {
+    if (this.connection.kind === 'vertex-ai') return vertexCapabilities({
+      connection: this.connection, secret: this.secret, fetchImpl: this.fetch, purpose, verify,
+    });
     let models = []; let source = 'saved'; let liveError = ''; let catalogNote = '';
     try {
       models = await this.#liveModels(purpose);
       if (models.length) source = 'live';
     } catch (error) {
       liveError = error.message;
-      if (this.connection.kind === 'vertex-ai' && /API keys are not supported by this API/iu.test(liveError)) {
-        catalogNote = 'Google 的实时模型目录只接受 OAuth；API Key 仍可用于模型调用，当前显示内置 Vertex 模型。';
-      }
     }
     const builtIn = builtInModels(this.connection.kind, purpose);
-    if (this.connection.kind === 'vertex-ai') models = mergeModels(models, builtIn);
     if (!models.length && builtIn.length) { models = builtIn; source = 'built-in'; }
     if (!models.length) models = this.connection.cachedModels.map((id) => ({ id, name: id }));
-    else if (this.connection.kind === 'vertex-ai' && source !== 'live') source = 'built-in';
-    const efforts = this.connection.kind === 'vertex-ai'
-      ? ['minimal', 'low', 'medium', 'high'] : ['low', 'medium', 'high'];
+    const efforts = ['low', 'medium', 'high'];
     return { available: true, models: models.map((item) => ({ id: item.id, name: item.name || item.id,
       efforts: item.efforts || (purpose === 'chat' ? efforts : []) })), efforts: purpose === 'chat' ? efforts : [],
       supportsManualModel: false, source, liveError, catalogNote };
@@ -91,13 +90,13 @@ export class HttpChatEngine {
   }
 
   async #vertex(prompt, settings, session, signal) {
-    const url = endpoint(this.connection.baseUrl, `/models/${encodeURIComponent(settings.model)}:generateContent`);
+    const { url, headers } = vertexModelTarget(this.connection, this.secret, settings.model, 'generateContent');
     const contents = [...session.messages, { role: 'user', content: prompt }].map((message) => ({
       role: message.role === 'assistant' ? 'model' : 'user', parts: [{ text: message.content }],
     }));
     const generationConfig = settings.effort ? { thinkingConfig: { thinkingLevel: settings.effort.toUpperCase() } } : {};
     const data = await requestJson(this.fetch, url, {
-      method: 'POST', headers: { ...vertexHeaders(this.secret, this.connection.options), 'Content-Type': 'application/json' },
+      method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ systemInstruction: { parts: [{ text: session.instructions }] }, contents, generationConfig }),
     }, signal);
     const text = data?.candidates?.[0]?.content?.parts?.filter((part) => typeof part?.text === 'string').map((part) => part.text).join('') ?? '';
@@ -109,7 +108,6 @@ export class HttpChatEngine {
     if (this.connection.kind === 'openai-compatible') return this.#openAiModels();
     if (this.connection.kind === 'anthropic-compatible') return this.#anthropicModels();
     if (this.connection.kind === 'elevenlabs') return this.#elevenLabsModels(purpose);
-    if (this.connection.kind === 'vertex-ai') return this.#vertexModels(purpose);
     if (this.connection.kind === 'comfyui') return this.#comfyModels();
     return [];
   }
@@ -140,18 +138,6 @@ export class HttpChatEngine {
       .map((item) => ({ id: item?.model_id, name: item?.name || item?.model_id })).filter((item) => item.id);
   }
 
-  async #vertexModels(purpose) {
-    if (!this.connection.baseUrl || !this.secret) return [];
-    const data = await requestJson(this.fetch, vertexCatalogUrl(this.connection.baseUrl), {
-      headers: vertexHeaders(this.secret, this.connection.options),
-    }, undefined, 30_000);
-    const entries = Array.isArray(data?.publisherModels) ? data.publisherModels
-      : (Array.isArray(data?.models) ? data.models : data?.data);
-    return modelItems(entries, 'displayName').map((item) => ({ ...item, id: item.id.split('/').at(-1) }))
-      .filter((item) => purpose !== 'tts' || /tts|audio|speech/iu.test(item.id))
-      .filter((item) => purpose !== 'image' || /image|imagen/iu.test(item.id));
-  }
-
   async #comfyModels() {
     if (!this.connection.baseUrl) return [];
     const data = await requestJson(this.fetch, endpoint(this.connection.baseUrl, '/object_info'), {}, undefined, 30_000);
@@ -169,27 +155,13 @@ function modelItems(items, nameKey = 'name') {
 }
 
 function builtInModels(kind, purpose) {
-  const vertexChat = [
-    { id: 'gemini-4-argon', name: 'Gemini 4 Argon', efforts: ['low', 'medium', 'high'] },
-    'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash',
-    'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-2.5-pro', 'gemini-2.5-flash',
-  ];
   const catalogs = {
     minimax: { tts: ['speech-2.8-hd', 'speech-2.8-turbo'] },
     elevenlabs: { tts: ['eleven_v4', 'eleven_v4_turbo', 'eleven_v3', 'eleven_multilingual_v2', 'eleven_flash_v2_5'], stt: ['scribe_v2'] },
-    'vertex-ai': {
-      chat: vertexChat, stt: vertexChat,
-      tts: ['gemini-2.5-flash-tts'], image: ['gemini-2.5-flash-image', 'imagen-4.0-generate-001'],
-    },
     novelai: { image: ['nai-diffusion-4-full'] },
   };
   return (catalogs[kind]?.[purpose] || []).map((item) => typeof item === 'string'
     ? { id: item, name: item } : item);
-}
-
-function mergeModels(primary, fallback) {
-  const seen = new Set();
-  return [...primary, ...fallback].filter((item) => item?.id && !seen.has(item.id) && seen.add(item.id));
 }
 
 async function requestJson(fetchImpl, url, init, signal, timeoutMs = TIMEOUT_MS) {
@@ -217,14 +189,6 @@ function elevenLabsEndpoint(base, suffix) {
   const value = String(base || '').replace(/\/+$/u, '');
   return /\/v1$/u.test(value) ? `${value}${suffix}` : `${value}/v1${suffix}`;
 }
-function vertexCatalogUrl(base) {
-  const url = new URL(base);
-  const match = url.pathname.match(/^\/v1\/projects\/[^/]+\/locations\/([^/]+)\/publishers\/google(?:\/models(?:\/[^/:]+(?::[^/]+)?)?)?$/u);
-  const requestedLocation = match?.[1] || 'us-central1';
-  const location = requestedLocation === 'global' ? 'us-central1' : requestedLocation;
-  return `${url.protocol}//${location}-aiplatform.googleapis.com/v1beta1/publishers/google/models?listAllVersions=false`;
-}
-function vertexHeaders(secret, options = {}) { return (options.authStyle || options.authType || 'api-key') === 'bearer' ? { Authorization: `Bearer ${secret}` } : { 'x-goog-api-key': secret }; }
 function responseText(data) {
   if (typeof data?.output_text === 'string') return data.output_text;
   return Array.isArray(data?.output) ? data.output.flatMap((item) => item?.content ?? [])

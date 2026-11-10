@@ -4,6 +4,7 @@ import { extname, join } from 'node:path';
 import { runProcess } from './process-runner.mjs';
 import { firstImageFromZip } from './zip-image.mjs';
 import { imagePayload as checked } from '../media/image-payload.mjs';
+import { vertexModelTarget } from '../engines/api/vertex-models.mjs';
 
 const subscriptionQueues = new Map();
 
@@ -55,21 +56,16 @@ async function openAiImage({ connection, route, prompt, secret, signal, fetchImp
 }
 
 async function vertexImage({ connection, route, prompt, secret, signal, fetchImpl }) {
-  const url = new URL(connection.baseUrl);
-  const model = route.model || url.pathname.match(/\/models\/([^/:]+)(?::[^/]+)?$/u)?.[1] || 'gemini-2.5-flash-image';
+  const model = route.model || new URL(connection.baseUrl).pathname.match(/\/models\/([^/:]+)(?::[^/]+)?$/u)?.[1] || 'gemini-2.5-flash-image';
   const imagen = /^imagen-/iu.test(model);
   const method = imagen ? 'predict' : 'generateContent';
-  const publisher = url.pathname.replace(/\/models(?:\/[^/]+)?\/?$/u, '').replace(/\/+$/u, '');
-  url.pathname = `${publisher}/models/${encodeURIComponent(model)}:${method}`;
-  const options = connection.options || {};
-  const authStyle = options.authStyle || options.authType || 'api-key';
-  if (authStyle === 'query' && secret) url.searchParams.set(options.authName || 'key', secret);
+  const { url, headers } = vertexModelTarget(connection, secret, model, method);
   const body = imagen
     ? { instances: [{ prompt }], parameters: { sampleCount: 1, ...route.options } }
     : { contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig: { responseModalities: ['TEXT', 'IMAGE'], ...route.options } };
-  const response = await timedFetch(fetchImpl, url.href, { method: 'POST', signal,
-    headers: { 'Content-Type': 'application/json', ...authHeaders(authStyle === 'query' ? '' : secret, { ...options, authStyle }) },
+  const response = await timedFetch(fetchImpl, url, { method: 'POST', signal,
+    headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(body) });
   const data = await response.json().catch(() => null); assertResponse(response, data);
   const inline = imagen ? data?.predictions?.find((item) => item?.bytesBase64Encoded)

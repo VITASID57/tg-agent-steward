@@ -7,10 +7,11 @@ function memoryFile(initial = { bots: {} }) {
   return { async read() { return structuredClone(value); }, async update(update) { value = await update(structuredClone(value)); return value; } };
 }
 
-test('wechat runtime routes text through the shared conversation manager and preserves sync state', async () => {
-  const sent = []; let polls = 0; let context;
+test('wechat runtime routes messages after a rejected startup notification if polling works', async () => {
+  const sent = []; const states = []; let polls = 0; let context;
   const client = {
-    async notifyStart() {}, async notifyStop() {},
+    async notifyStart() { throw Object.assign(new Error('expired'), { code: -14 }); },
+    async notifyStop() {},
     async getUpdates(_buffer, signal) {
       polls += 1;
       if (polls === 1) return { get_updates_buf: 'next-buffer', msgs: [{
@@ -28,6 +29,7 @@ test('wechat runtime routes text through the shared conversation manager and pre
     controlPlaneStore: { async get() { return { bots: [{ id: 'wechat-bot', enabled: true, channel: { type: 'wechat-clawbot' },
       wechat: { allowedUserIds: ['user-1'], typingIndicator: false, splitParagraphs: false, longMessageSplit: true } }] }; } },
     manager: { async reply(chatId, text, options) { context = { chatId, text, options }; return { text: '收到啦' }; } },
+    onStatus(value) { states.push(value); },
     logger: { error() {} },
   });
   await runtime.start();
@@ -38,6 +40,8 @@ test('wechat runtime routes text through the shared conversation manager and pre
   } });
   assert.deepEqual(sent, [{ userId: 'user-1', token: 'ctx-1', text: '收到啦' }]);
   assert.equal((await stateFile.read()).bots['wechat-bot'].syncBuffer, 'next-buffer');
+  assert.equal(states[0].checking, true);
+  assert.equal(states.at(-1).running, true);
 });
 
 test('wechat runtime stops polling and surfaces an expired login', async () => {
@@ -50,9 +54,10 @@ test('wechat runtime stops polling and surfaces an expired login', async () => {
     controlPlaneStore: { async get() { return { bots: [] }; } }, manager: {},
     onStatus(value) { statuses.push(value); }, logger: { error() {} },
   });
-  await runtime.start(); await waitFor(() => statuses.some((item) => item.running === false)); runtime.stop();
+  await runtime.start(); await waitFor(() => statuses.some((item) => item.sessionExpired)); runtime.stop();
   assert.equal(polls, 1);
-  assert.match(statuses.at(-1).lastError, /上游限制/u);
+  assert.match(statuses.at(-1).lastError, /会话已失效/u);
+  assert.equal(statuses.at(-1).sessionExpired, true);
 });
 
 test('wechat voice transcript becomes user text and can be switched off', () => {
