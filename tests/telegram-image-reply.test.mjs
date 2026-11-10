@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { CodexEngine } from '../src/engines/codex/codex-engine.mjs';
+import { ImageService } from '../src/image/image-service.mjs';
 import { TelegramRuntime } from '../src/telegram/telegram-runtime.mjs';
 
 const png = Buffer.from('89504e470d0a1a0a', 'hex');
@@ -41,15 +42,25 @@ test('a native Codex drawing event reaches Telegram as image bytes without a tex
     ['text', '有 1 张图片没能发送，请稍后再试。']]);
 });
 
-test('a configured image route handles a natural-language request before it reaches chat', async () => {
+test('a conversational drawing test reaches the configured Vertex route and uploads the final photo', async () => {
+  const connection = { id: 'vertex', kind: 'vertex-ai', baseUrl: 'https://vertex.test/v1/publishers/google' };
+  const imageService = new ImageService({
+    controlPlaneStore: { async get() { return { connections: [connection],
+      imageProfiles: [{ id: 'art', primary: { connectionId: 'vertex', model: 'gemini-nano-banana-2.1' }, fallbacks: [] }] }; } },
+    secretStore: { async read() { return 'fixture-key'; } },
+    fetchImpl: async (url, init) => {
+      assert.match(url, /gemini-nano-banana-2\.1:generateContent$/u);
+      assert.match(JSON.parse(init.body).contents[0].parts[0].text, /老公贝～测试画图/u);
+      return Response.json({ candidates: [{ content: { parts: [
+        { thought: true, inlineData: { mimeType: 'image/png', data: 'bad' } },
+        { inlineData: { mimeType: 'image/png', data: png.toString('base64') } },
+      ] } }] });
+    },
+  });
   const result = await runTelegram({
     bot: { image: { enabled: true, imageProfileId: 'art' } },
     manager: { reply: () => assert.fail('the chat model should not generate this request') },
-    imageService: { async generate(profile, prompt) {
-      assert.equal(profile, 'art');
-      assert.equal(prompt, '那老公再画个画看看');
-      return { image: png, extension: 'png' };
-    } },
+    imageService,
   });
   assert.deepEqual(result, [['photo', png, 'image.png']]);
 });
@@ -66,7 +77,7 @@ async function runTelegram({ bot, manager, imageService }) {
     async getUpdates(_offset, signal) {
       if (first) {
         first = false;
-        return [{ update_id: 1, message: { text: '那老公再画个画看看', chat: { id: 42, type: 'private' } } }];
+        return [{ update_id: 1, message: { text: '老公贝～测试画图', chat: { id: 42, type: 'private' } } }];
       }
       finish();
       return new Promise((resolve) => signal.addEventListener('abort', () => resolve([]), { once: true }));

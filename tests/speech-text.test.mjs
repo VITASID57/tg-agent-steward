@@ -17,8 +17,16 @@ test('voice tags stay only on providers that support them', () => {
   const gemini = prepareSpeechText('[laughs] 你好', { kind: 'vertex-ai' }, {});
   assert.equal(gemini, '[laughing] 你好');
   assert.equal(stripVoiceTags('[softly] 你好。'), '你好。');
+  assert.equal(stripVoiceTags('[mischievously] 你好。'), '你好。');
   assert.equal(stripVoiceTags('参考 [OpenAI] 文档'), '参考 [OpenAI] 文档');
   assert.match(voiceTagGuide({ kind: 'elevenlabs' }), /\[excited\]/u);
   assert.match(voiceTagGuide({ kind: 'elevenlabs' }, { model: 'eleven_v4' }), /\[curious\]/u);
   assert.doesNotMatch(voiceTagGuide({ kind: 'vertex-ai' }), /\[excited\]/u);
+});
+
+test('speech keeps link labels without sending URLs and fenced code to TTS', () => {
+  const spoken = prepareSpeechText('请看[说明](https://example.test/path?x=secret)。\n```js\nrun()\n```\nhttps://example.test/image.png 说完啦。', { kind: 'edge-tts' }, {});
+  assert.match(spoken, /请看说明。/u);
+  assert.match(spoken, /说完啦。/u);
+  assert.doesNotMatch(spoken, /https|secret|run\(\)/u);
 });

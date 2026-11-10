@@ -1,6 +1,7 @@
 import { McpRemoteClient } from './mcp-remote-client.mjs';
 import { McpStdioClient } from './mcp-stdio-client.mjs';
 import { mcpImages } from '../media/image-payload.mjs';
+import { mediaToolBlocked } from '../media/automatic-tools.mjs';
 
 export class ToolBroker {
   constructor({ controlPlaneStore, secretStore, fetchImpl = fetch, spawnImpl }) {
@@ -15,7 +16,7 @@ export class ToolBroker {
     for (const { connection, tools } of sources) {
       for (const tool of tools) {
         if (!result.has(tool.name) && allowedFor(bot, connection, tool.name) && canWrite(bot, connection, tool)
-          && !sensitiveAction(tool.name, tool.description)) {
+          && !sensitiveAction(tool.name, tool.description) && !mediaToolBlocked(bot, tool.name)) {
           result.set(tool.name, { ...tool, connectionId: connection.id, connectionName: connection.name });
         }
       }
@@ -25,6 +26,7 @@ export class ToolBroker {
 
   async callForBot(bot, name, args, { signal, manual = false } = {}) {
     if (!bot.tools.enabled) throw new Error('这个 Bot 没有启用工具');
+    if (!manual && mediaToolBlocked(bot, name)) throw new Error('此 Bot 的媒体能力由栖光庭预设和消息入口管理');
     if (bot.tools.allowedToolNames?.length && !bot.tools.allowedToolNames.includes(name)) throw new Error('这个工具不在 Bot 白名单中');
     let blocked = '';
     for (const { connection, tools } of await this.#sources(bot, signal)) {

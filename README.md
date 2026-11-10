@@ -27,15 +27,15 @@ Telegram / 微信 Bot 连接、模型与能力设置的控制台。外置记忆�
 - 人物档案由任意数量的标题/正文模块组成；没有强制默认人格或渠道话术，每块可关闭保留，也可限制为仅私聊、仅 Telegram 或仅微信。
 - 语音预设支持首选与多级备用线路：MiniMax、ElevenLabs、GPT-SoVITS、
   Vertex AI TTS 和本地 Edge TTS。
-- 语音回复概率是真实发送门：`0%` 从不合成，`100%` 每轮尝试，中间值逐轮
-  抽样；TTS 失败自动回退文字。
+- 日常语音回复按概率逐轮抽样，`/voice` 或「试试语音」可指定本轮用语音。
+  微信发送可播放的音频文件。两端默认只发音频，合成或上传失败时回退文字。
 - 中文日期、时间、金额、百分比会在 TTS 前转成更自然的口语；ElevenLabs v4、
   v4 Turbo、v3 与
   Vertex/Gemini 可使用受控语气标签，标签不会显示在文字消息或写进记忆。
 - Telegram 语音消息可经 ElevenLabs、OpenAI 兼容接口、Vertex/Gemini 或本机
   Whisper 转写，再进入同一条对话链。
-- 生图预设支持首选与备用：Codex / Grok 订阅 CLI、OpenAI 兼容中转、Vertex、
-  NovelAI 与 ComfyUI；发送 `/draw 画面描述` 调用。
+- Telegram 的生图预设支持首选与备用：Codex / Grok 订阅 CLI、OpenAI 兼容中转、
+  Vertex、NovelAI 与 ComfyUI。聊天中请求画图或发 `/draw 画面描述` 都可调用。
 - 通用 MCP 支持远程 Streamable HTTP 和本机 stdio；Bot 只看到勾选的连接和
   白名单工具。模型可先调工具再回答，也可用 `/tools`、`/tool` 手动调用。
 - 通用外置记忆 HTTP / MCP 接口：首轮或长时间离线使用 `awakening`，普通接续使用

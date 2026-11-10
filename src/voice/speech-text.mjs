@@ -7,7 +7,7 @@ const GEMINI_TAGS = new Map([
   ['whispers', 'whispering'], ['softly', 'whispering'], ['sighs', 'sigh'], ['laughs', 'laughing'],
   ['chuckles', 'laughing'], ['nervous', 'scared'], ['pause', 'short pause'],
 ]);
-const VISIBLE_TAGS = new Set([...VOICE_TAGS, ...GEMINI_TAGS.values()]);
+const VISIBLE_TAGS = new Set([...V4_VOICE_TAGS, ...GEMINI_TAGS.values()]);
 const PICTOGRAPH = /[\p{Extended_Pictographic}\u{FE0F}\u{200D}]/gu;
 const MARKUP = /(?:\*\*|__|`+|^#{1,6}\s+|^>\s?)/gmu;
 const CJK = /[\u3400-\u9fff]/u;
@@ -30,7 +30,11 @@ export function stripVoiceTags(text) {
 }
 
 export function prepareSpeechText(text, connection, route) {
-  const cleaned = speakNumbersInChinese(String(text).replace(PICTOGRAPH, '').replace(MARKUP, ''));
+  const readable = String(text)
+    .replace(/```[\s\S]*?```|~~~[\s\S]*?~~~/gu, ' ')
+    .replace(/!?\[([^\]\n]*)\]\(https?:\/\/[^)\s]+\)/giu, '$1')
+    .replace(/https?:\/\/[^\s<>()\[\]，。！？、；：\u3400-\u9fff]+/giu, ' ');
+  const cleaned = speakNumbersInChinese(readable.replace(PICTOGRAPH, '').replace(MARKUP, ''));
   if (!supportsVoiceTags(connection, route)) return stripAllBracketTags(cleaned);
   if (connection.kind === 'elevenlabs') {
     const allowed = /eleven_v4/iu.test(elevenModel(route)) ? V4_VOICE_TAGS : VOICE_TAGS;

@@ -84,7 +84,7 @@ const wechatService = new WechatService({
   controlPlaneStore, secretStore, stateFile: wechatStateFile, eventStore,
   createRuntime: (botId, account, onStatus) => new WechatRuntime({
     botId, client: new WechatClient(account), controlPlaneStore, manager, stateFile: wechatStateFile,
-    pairing, voiceService, imageService, stickerService, eventStore, onStatus,
+    pairing, voiceService, stickerService, eventStore, onStatus,
   }),
 });
 const wakeService = new WakeService({ controlPlaneStore,

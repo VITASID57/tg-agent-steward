@@ -23,7 +23,8 @@ export class ImageService {
       try {
         const secret = await this.secretStore.read(`connection:${connection.id}`);
         const result = await generateImageRoute({ connection, route, prompt, secret, signal, fetchImpl: this.fetch, runImpl: this.run });
-        return { ...result, connectionId: connection.id, fallbackNote: errors.length ? errors.join('；') : null };
+        return { ...result, connectionId: connection.id, route: [connection.kind, route.model].filter(Boolean).join(' · '),
+          fallbackNote: errors.length ? errors.join('；') : null };
       } catch (error) { errors.push(`${connection.name}：${error.message}`); }
     }
     throw new Error(errors.join('；') || '没有可用的生图线路');
@@ -62,14 +63,16 @@ async function vertexImage({ connection, route, prompt, secret, signal, fetchImp
   const { url, headers } = vertexModelTarget(connection, secret, model, method);
   const body = imagen
     ? { instances: [{ prompt }], parameters: { sampleCount: 1, ...route.options } }
-    : { contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    : { contents: [{ role: 'user', parts: [{ text: `根据请求生成一张图片。如果只是测试且没有画面描述，请画一朵蓝色小花。\n${prompt}` }] }],
       generationConfig: { responseModalities: ['TEXT', 'IMAGE'], ...route.options } };
   const response = await timedFetch(fetchImpl, url, { method: 'POST', signal,
     headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(body) });
   const data = await response.json().catch(() => null); assertResponse(response, data);
   const inline = imagen ? data?.predictions?.find((item) => item?.bytesBase64Encoded)
-    : data?.candidates?.flatMap((candidate) => candidate.content?.parts || []).find((part) => part?.inlineData?.data)?.inlineData;
+    : data?.candidates?.flatMap((candidate) => candidate.content?.parts || [])
+      .find((part) => !part?.thought && part?.inlineData?.data
+        && (!part.inlineData.mimeType || part.inlineData.mimeType.startsWith('image/')))?.inlineData;
   const bytes = imagen ? inline?.bytesBase64Encoded : inline?.data;
   if (!bytes) throw new Error('Vertex 没有返回图片');
   return checked(Buffer.from(bytes, 'base64'), inline.mimeType);

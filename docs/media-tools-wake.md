@@ -25,15 +25,18 @@ only stores the image-route ID.
 Use `/draw` or ask for a picture in chat. Telegram uploads generated images
 from the configured image route, native Codex image events, and inline MCP
 image results. `/draw` uses the configured image route and takes a text prompt.
+When a Telegram Bot has an image preset, clear drawing requests go to that
+preset before the chat engine can choose external tools.
 
 ## Voice
 
 Output voice profiles can use MiniMax, ElevenLabs, GPT-SoVITS, Vertex/Gemini
 TTS and local Edge TTS with ordered fallback. The probability slider is applied
 before synthesis, so a missed turn spends no TTS quota.
-In Telegram, a successful voice upload sends only audio by default, including
-for existing Bots. Synthesis or upload failure falls back to the text reply.
-Use the Bot's **同时发送文字** switch if you want both.
+Both channels send only audio by default after a successful upload. Telegram
+can send a voice note and WeChat sends a playable file. Synthesis or upload
+failure falls back to the text reply. Use **同时发送文字** to receive both.
+Explicit requests like `/voice` or **试试语音** bypass the random gate.
 
 Incoming Telegram voice/audio can use ElevenLabs Scribe, an OpenAI-compatible
 `/v1/audio/transcriptions` endpoint, Vertex/Gemini inline audio, or a local

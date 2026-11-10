@@ -41,7 +41,7 @@ test('Telegram runtime only calls TTS when the saved probability gate hits', asy
 });
 
 test('an explicit Telegram voice request bypasses probability and reports a real TTS failure', async () => {
-  const success = await run(() => 0.99, '给我发语音看看');
+  const success = await run(() => 0.99, '喵喵～再试试语音🥰');
   assert.equal(success.synthesized, 1); assert.deepEqual(success.sent, ['voice']);
   const failed = await run(() => 0.99, '用语音说给我听', { synthesize: async () => { throw new Error('填入的是 API Key ID'); } });
   assert.equal(failed.synthesized, 1);

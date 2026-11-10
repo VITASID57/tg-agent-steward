@@ -1,4 +1,4 @@
-export async function handleCommand({ text, chatId, chatType, botUsername, bot, manager, controlPlaneStore, pairing, engines, imageService, toolBroker }) {
+export async function handleCommand({ text, chatId, chatType, botUsername, bot, manager, controlPlaneStore, pairing, engines, toolBroker }) {
   const [raw, arg = ''] = text.trim().split(/\s+/, 2);
   const command = raw.split('@')[0].toLowerCase();
   if (command === '/start' && arg.startsWith('lko_')) {
@@ -14,8 +14,7 @@ export async function handleCommand({ text, chatId, chatType, botUsername, bot, 
   if (command === '/draw') {
     if (!arg) return { handled: true, text: '请在 /draw 后面写画面描述。' };
     if (!bot.image.enabled || !bot.image.imageProfileId) return { handled: true, text: '这个 Bot 还没有启用生图路线。' };
-    const result = await imageService.generate(bot.image.imageProfileId, text.trim().slice(raw.length).trim());
-    return { handled: true, image: result, text: result.fallbackNote ? `已使用备用线路。${result.fallbackNote}` : '' };
+    return { handled: true, imagePrompt: text.trim().slice(raw.length).trim() };
   }
   if (command === '/tools') {
     if (!bot.tools.enabled || !bot.tools.connectionIds.length) return { handled: true, text: '这个 Bot 还没有启用外部工具。' };

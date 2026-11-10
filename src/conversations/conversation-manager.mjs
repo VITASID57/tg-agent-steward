@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { assembleInstructions, assembleTurnPrompt } from '../prompt/assemble.mjs';
 import { stripVoiceTags } from '../voice/speech-text.mjs';
+import { mediaGuide } from '../media/automatic-tools.mjs';
 
 const HANDOFF_PROMPT = `请为下一段会话写一份简短交接摘要。只保留：正在聊的话题、双方已经确认的事实、未完成事项、需要延续的情绪与称呼。不要复述系统提示，不要添加新事实。直接输出摘要。`;
 
@@ -67,7 +68,7 @@ export class ConversationManager {
       .map(([, value]) => value).sort((a, b) => String(b.lastMessageAt).localeCompare(String(a.lastMessageAt)))[0] ?? null;
     const tools = runtime.bot?.tools?.enabled ? await this.toolBroker?.listForBot(runtime.bot).catch(() => []) : [];
     const instructions = [assembleInstructions({ persona: runtime.persona, profile: runtime.profile,
-      settings: runtime.settings, context: { surface: runtime.settings.channel } }), toolInstructions(tools)].filter(Boolean).join('\n\n');
+      settings: runtime.settings, context: { surface: runtime.settings.channel } }), mediaGuide(runtime.bot), toolInstructions(tools)].filter(Boolean).join('\n\n');
     const dynamicExample = assembleTurnPrompt({ message: '（本轮收到的消息）',
       memory: runtime.bot?.memoryConnectionId ? '（外置记忆按本轮话题读取后放在这里）' : '',
       stickerInstructions: runtime.bot?.stickers?.enabled ? '（本轮相关表情候选放在这里）' : '' });
@@ -94,7 +95,8 @@ export class ConversationManager {
     const { settings, persona, profile, connection } = runtime;
     const tools = runtime.bot?.tools?.enabled ? await this.toolBroker?.listForBot(runtime.bot).catch(() => []) : [];
     const catalog = toolInstructions(tools);
-    const toolRevision = runtime.bot?.tools?.enabled ? createHash('sha256').update(catalog).digest('hex').slice(0, 16) : '';
+    const media = mediaGuide(runtime.bot);
+    const toolRevision = catalog || media ? createHash('sha256').update(`${catalog}\n${media}`).digest('hex').slice(0, 16) : '';
     const personaVersion = profile
       ? `${profile.id}:${profile.revision}:${runtime.bot?.updatedAt ?? ''}:${connection?.updatedAt ?? ''}${toolRevision ? `:${toolRevision}` : ''}`
       : persona.id;
@@ -103,7 +105,7 @@ export class ConversationManager {
     const handoff = transition ? await this.#createHandoff(current, runtime) : (current?.handoff ?? '');
     const sessionId = transition ? null : (current?.sessionId ?? null);
     const memory = await this.memoryProvider?.beforeReply?.({ chatId, text, context, settings, current });
-    const instructions = [assembleInstructions({ persona, profile, settings, context }), catalog].filter(Boolean).join('\n\n');
+    const instructions = [assembleInstructions({ persona, profile, settings, context }), media, catalog].filter(Boolean).join('\n\n');
     const stickerCandidates = await this.stickerService?.candidates(runtime.bot, text, current).catch(() => []) ?? [];
     const prompt = assembleTurnPrompt({ message: text, handoff, memory: memory?.text ?? '',
       stickerInstructions: this.stickerService?.instructions(stickerCandidates) ?? '' });
@@ -113,8 +115,7 @@ export class ConversationManager {
       if (tools.length) result = await this.#completeToolCalls(result, runtime.bot, tools, engine, { settings, instructions, requestKey: key });
       const stickerResult = this.stickerService?.extract(result.text, stickerCandidates) ?? { text: result.text, sticker: null };
       result = { ...result, text: stickerResult.text, sticker: stickerResult.sticker };
-      const speechText = context.voiceGuide ? result.text : null;
-      if (speechText) result = { ...result, text: stripVoiceTags(speechText), speechText };
+      result = { ...result, text: stripVoiceTags(result.text), ...(context.voiceGuide ? { speechText: result.text } : {}) };
       const chat = {
         engine: connection?.kind ?? settings.engine, connectionId: connection?.id ?? null,
         sessionId: result.sessionId, personaId: personaVersion,

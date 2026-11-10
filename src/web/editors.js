@@ -151,7 +151,7 @@ function fillBot(app, itemId) {
   $('#bot-model').value = ''; $('#bot-effort').value = '';
   $('#bot-voice-enabled').checked = item?.voice?.enabled ?? false;
   $('#bot-voice-text').checked = item?.voice?.telegramSendTextWithVoice ?? false;
-  $('#bot-wechat-voice-text').checked = item?.voice?.sendTextWithVoice ?? true;
+  $('#bot-wechat-voice-text').checked = item?.voice?.wechatSendTextWithVoice ?? false;
   $('#bot-voice-probability').value = item?.voice?.replyProbability ?? 0; $('#bot-allowed').value = item?.telegram?.allowedChatIds?.join(', ') || '';
   $('#bot-telegram-typing').checked = item?.telegram?.typingIndicator ?? true;
   $('#bot-telegram-split').checked = item?.telegram?.splitParagraphs ?? true;
@@ -213,7 +213,8 @@ function botBody(app) {
       longMessageSplit: $('#bot-wechat-long-split').checked }, voice: {
       enabled: $('#bot-voice-enabled').checked, replyProbability: Number($('#bot-voice-probability').value),
       voiceProfileId: $('#bot-voice-profile').value || null, transcriptionConnectionId: $('#bot-transcription').value || null,
-      sendTextWithVoice: $('#bot-wechat-voice-text').checked, telegramSendTextWithVoice: $('#bot-voice-text').checked },
+      sendTextWithVoice: existing?.voice?.sendTextWithVoice ?? false, wechatSendTextWithVoice: $('#bot-wechat-voice-text').checked,
+      telegramSendTextWithVoice: $('#bot-voice-text').checked },
     image: { enabled: $('#bot-image-enabled').checked,
       imageProfileId: $('#bot-image-profile').value || null }, tools: { enabled: $('#bot-tools-enabled').checked,
       connectionIds: [...$('#bot-tool-connections').selectedOptions].map((option) => option.value),

@@ -51,7 +51,7 @@ export function defaultControlPlane(legacy = {}) {
       },
       voice: {
         enabled: false, replyProbability: 0, voiceProfileId: null, transcriptionConnectionId: null,
-        sendTextWithVoice: true, telegramSendTextWithVoice: false,
+        sendTextWithVoice: false, telegramSendTextWithVoice: false, wechatSendTextWithVoice: false,
       },
       image: { enabled: false, imageProfileId: null },
       tools: { enabled: false, connectionIds: [], allowedToolNames: [], disabledByConnection: {}, allowWrites: false, maxCalls: 2 },

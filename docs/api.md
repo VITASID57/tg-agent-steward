@@ -37,7 +37,8 @@
 
 Bot 的 `tools.disabledByConnection` 按连接 ID 保存关闭的工具名数组。它和
 `tools.allowedToolNames` 白名单同时生效。Telegram 使用
-`voice.telegramSendTextWithVoice` 选择是否同时发正文，默认关闭。
+`voice.telegramSendTextWithVoice` 选择是否同时发正文，微信使用
+`voice.wechatSendTextWithVoice`。两端默认关闭。
 
 Vertex 使用 API Key 时，常规模型请求展示按用途整理的候选。给 `GET /api/models`
 加 `verify=1`，或给 `POST /api/models/preview` 加 `"verify": true`，即可在当前

@@ -142,6 +142,7 @@ export function normalizeBot(input) {
       voiceProfileId: optional(voice.voiceProfileId, 160), transcriptionConnectionId: optional(voice.transcriptionConnectionId, 160),
       sendTextWithVoice: voice.sendTextWithVoice !== false,
       telegramSendTextWithVoice: voice.telegramSendTextWithVoice === true,
+      wechatSendTextWithVoice: voice.wechatSendTextWithVoice === true,
     },
     image: { enabled: image.enabled === true, imageProfileId: optional(image.imageProfileId, 160) },
     tools: {

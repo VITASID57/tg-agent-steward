@@ -63,3 +63,21 @@ test('per-connection switches apply to both discovery and manual calls across pa
   await assert.rejects(broker.callForBot(bot, 'paint', {}, { manual: true }), /关闭/u);
   assert.deepEqual(calls, ['second.test']);
 });
+
+test('configured media routes take priority over automatic MCP generators without disabling manual tools', async () => {
+  const connection = { id: 'tools', name: 'tools', kind: 'mcp-remote', baseUrl: 'https://tools.test/mcp', options: { accessMode: 'read-only' } };
+  const broker = new ToolBroker({ controlPlaneStore: { async get() { return { connections: [connection] }; } },
+    secretStore: { async read() { return ''; } }, fetchImpl: async (_url, init) => {
+      const request = JSON.parse(init.body);
+      if (!request.id) return new Response(null, { status: 202 });
+      if (request.method === 'tools/list') {
+        return rpcResult(request, { tools: ['generate_image', 'generate_voice', 'get_tts_settings', 'search'].map((name) => ({ name })) });
+      }
+      return rpcResult(request, request.method === 'initialize' ? {} : { content: [{ type: 'text', text: 'done' }] });
+    } });
+  const bot = { image: { enabled: true, imageProfileId: 'art' }, voice: { enabled: true, voiceProfileId: 'voice' },
+    tools: { enabled: true, connectionIds: ['tools'], allowedToolNames: [] } };
+  assert.deepEqual((await broker.listForBot(bot)).map(({ name }) => name), ['get_tts_settings', 'search']);
+  await assert.rejects(broker.callForBot(bot, 'generate_image', {}), /媒体能力/u);
+  assert.equal((await broker.callForBot(bot, 'generate_image', {}, { manual: true })).output, 'done');
+});

@@ -91,24 +91,43 @@ test('wechat pairing grants an unknown sender before normal conversation', async
   assert.equal(sent[0], '配对成功，现在可以聊天了。');
 });
 
-test('wechat routes a clear natural-language image request to the configured image profile', async () => {
-  const sent = []; let polls = 0; let prompt = '';
+test('wechat explains its unavailable drawing entry even for older Bots with a saved image profile', async () => {
+  const sent = []; let polls = 0;
   const client = { async notifyStart() {}, async notifyStop() {},
     async getUpdates(_buffer, signal) {
       if (polls++ === 0) return { msgs: [{ msg_id: 'draw-1', message_type: 1, from_user_id: 'user-1', context_token: 'ctx',
         item_list: [{ type: 1, text_item: { text: '给我画张图，随便画啥' } }] }] };
       return new Promise((resolve) => signal.addEventListener('abort', () => resolve({ msgs: [] }), { once: true }));
     },
-    async sendImage(_user, _token, image) { sent.push(image); }, async startTyping() { return null; }, async stopTyping() {},
+    async sendText(_user, _token, text) { sent.push(text); },
+    async sendImage() { assert.fail('a draw should not send an image'); },
   };
   const bot = { id: 'wechat-bot', enabled: true, channel: { type: 'wechat-clawbot' },
     wechat: { allowedUserIds: ['user-1'] }, image: { enabled: true, imageProfileId: 'art' } };
   const runtime = new WechatRuntime({ botId: 'wechat-bot', client, stateFile: memoryFile(),
     controlPlaneStore: { async get() { return { bots: [bot] }; } },
     manager: { async reply() { throw new Error('image request should not reach chat'); } },
-    imageService: { async generate(_profile, value) { prompt = value; return { image: Buffer.from([1]) }; } }, logger: { error() {} } });
+    logger: { error() {} } });
   await runtime.start(); await waitFor(() => sent.length === 1); runtime.stop();
-  assert.equal(prompt, '给我画张图，随便画啥'); assert.equal(sent[0][0], 1);
+  assert.match(sent[0], /微信 Bot 暂未开放生图/u);
+});
+
+test('wechat audio file delivery replaces the legacy text copy and falls back to text if upload fails', async () => {
+  const sent = []; let uploadFails = false;
+  const stateFile = memoryFile({ bots: { 'wechat-bot': { lastContact: { senderId: 'user-1', contextToken: 'ctx' } } } });
+  const bot = { id: 'wechat-bot', enabled: true, channel: { type: 'wechat-clawbot' }, wechat: { allowedUserIds: ['user-1'], typingIndicator: false },
+    voice: { enabled: true, voiceProfileId: 'voice', replyProbability: 100, sendTextWithVoice: true } };
+  const runtime = new WechatRuntime({ botId: bot.id, stateFile, controlPlaneStore: { async get() { return { bots: [bot] }; } },
+    manager: { async reply() { return { text: '你好' }; } }, voiceService: { async synthesize() { return { audio: Buffer.from([1]), extension: 'mp3' }; } },
+    client: {
+      async sendFile() { if (uploadFails) throw new Error('upload failed'); sent.push('audio file'); },
+      async sendText(_user, _context, text) { sent.push(text); }, async stopTyping() {},
+    }, logger: { error() {} } });
+  await runtime.proactive('user-1', 'hello');
+  assert.deepEqual(sent, ['audio file']);
+  uploadFails = true;
+  await runtime.proactive('user-1', 'hello');
+  assert.deepEqual(sent, ['audio file', '你好']);
 });
 
 test('wechat proactive wake reuses the latest target context and respects SILENT', async () => {
