@@ -59,3 +59,31 @@ test('diagnostics remain available before a bot has a model connection', async (
   assert.match(result.prompt.dynamicExample, /本轮收到的消息/);
   assert.deepEqual(result.tools, []);
 });
+
+test('a new session clears the old Claude session after an in-flight reply finishes', async () => {
+  const engine = new FakeEngine('claude');
+  const firstStarted = Promise.withResolvers();
+  const finishFirst = Promise.withResolvers();
+  const original = engine.complete.bind(engine);
+  engine.complete = async (input) => {
+    if (input.prompt.includes('旧窗最后一句')) {
+      firstStarted.resolve();
+      await finishFirst.promise;
+    }
+    return original(input);
+  };
+  const manager = new ConversationManager({
+    settingsStore: { get: async () => ({ engine: 'claude', telegram: {} }) },
+    personaStore: { get: async () => ({ current: { id: 'p1', text: '人物' } }) },
+    stateFile: new MemoryFile({ chats: {} }),
+    engines: { get: () => engine },
+  });
+  const oldReply = manager.reply('1', '旧窗最后一句');
+  await firstStarted.promise;
+  const reset = manager.newSession('1');
+  const newReply = manager.reply('1', '新窗第一句');
+  finishFirst.resolve();
+  await Promise.all([oldReply, reset, newReply]);
+  assert.equal(engine.calls.at(-1).sessionId, null);
+  assert.doesNotMatch(engine.calls.at(-1).prompt, /旧窗最后一句|上一会话交接/u);
+});

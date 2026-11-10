@@ -32,6 +32,9 @@ export class ConnectionTester {
       });
       if (!capability.available) return report('failed', '连接不可用', capability.error || '提供方没有返回可用能力。');
       const modelCount = Array.isArray(capability.models) ? capability.models.length : 0;
+      if (connection.kind === 'claude') {
+        return report('warning', 'Claude Code CLI 已找到', '只检查了本机 CLI 能否启动。模型列表是内置别名，未检查账号登录、额度或模型权限。');
+      }
       if (capability.source === 'verified') {
         return modelCount ? report('passed', 'Vertex 已通过实时检查', `${modelCount} 个模型通过免费 token 计数。实际生成权限以调用为准。`)
           : report('warning', 'Vertex 未通过模型检查', capability.catalogNote || '没有候选模型通过 token 计数。');

@@ -50,10 +50,18 @@ After deployment, the user opens the HTTPS address on their phone, enters the
 management password they set, then creates connection presets and pastes each
 BotFather token in the Bot page.
 
-API-key routes are the simplest phone-only option. Codex, Claude Code and Grok
-Build subscription routes require their official CLI and interactive account
-login on the same runtime machine, which ordinary phone-oriented hosting may not
-support. Account sessions are never baked into the image.
+API-key routes are the simplest phone-only option. CLI routes require the
+corresponding official binary and credentials in the same runtime environment.
+The included image can optionally install Codex and Grok Build. Claude Code
+requires a separately installed CLI in the runtime, or you can use an
+Anthropic-compatible API preset with your own key. On Windows, the official
+native `claude.exe` can be set with `CLAUDE_COMMAND`.
+
+The Claude Code self-check runs the CLI help command. It does not verify login,
+model access, or quota. Use your own API key for a product integration and see
+[Anthropic's authentication requirements](https://code.claude.com/docs/en/legal-and-compliance#authentication-and-credential-use)
+before choosing the route. Lumenkeep has no Claude sign-in form and receives no
+Claude account tokens. Account sessions are never baked into the image.
 
 ### Optional Codex and Grok Build subscription image
 

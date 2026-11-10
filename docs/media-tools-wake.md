@@ -30,6 +30,9 @@ mixed into normal chat can stay in the conversation path.
 
 Telegram uploads generated images from the configured route, native Codex image
 events, and inline MCP image results.
+Claude Code can be the chat engine while Telegram uses a separate image preset
+for `/draw` and a separate voice preset for `/voice`. These presets do not
+require native Claude Code image or speech tools.
 
 ### Telegram command menu
 

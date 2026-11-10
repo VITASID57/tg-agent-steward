@@ -17,7 +17,7 @@ import { bindToolSwitches, fillToolSwitches, disabledToolSettings } from './tool
 import { bindWakeTargetEditor, fillWakeTarget, wakeTarget } from './wake-target-editor.js';
 
 const KINDS = [
-  ['codex', 'Codex 订阅 / CLI'], ['claude', 'Claude Code 订阅 / CLI'], ['grok-build', 'Grok Build 订阅 / CLI'],
+  ['codex', 'Codex 订阅 / CLI'], ['claude', 'Claude Code CLI'], ['grok-build', 'Grok Build 订阅 / CLI'],
   ['openai-compatible', 'OpenAI 兼容 API / 中转站'], ['anthropic-compatible', 'Anthropic 兼容 API / 中转站'],
   ['vertex-ai', 'Google Vertex AI'], ['minimax', 'MiniMax TTS'], ['elevenlabs', 'ElevenLabs TTS'],
   ['gpt-sovits', '本地 GPT-SoVITS'], ['edge-tts', '免费 Edge TTS'], ['whisper-local', '本地 Whisper STT'],

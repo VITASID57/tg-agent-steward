@@ -24,7 +24,8 @@ export class ConversationManager {
   }
 
   async newSession(chatId, botId = 'bot-default') {
-    await this.#updateChat(this.#chatKey(botId, chatId), (chat) => ({ ...chat, sessionId: null, handoff: '', lastError: null }));
+    const key = this.#chatKey(botId, chatId);
+    await this.#serial(key, () => this.#updateChat(key, (chat) => ({ ...chat, sessionId: null, handoff: '', lastError: null })));
     return { ok: true };
   }
 

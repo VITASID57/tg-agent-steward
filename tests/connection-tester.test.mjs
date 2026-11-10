@@ -29,6 +29,13 @@ test('connection self-check reports missing required configuration', async () =>
   assert.equal(result.status, 'failed'); assert.match(result.message, /服务地址/u); assert.match(result.message, /密钥/u);
 });
 
+test('Claude Code self-check distinguishes CLI availability from account access', async () => {
+  const connection = { id: 'cc', kind: 'claude', capabilities: ['chat'], options: {} };
+  const result = await harness(connection, { capability: { available: true, source: 'built-in', models: [{ id: 'sonnet' }] } }).tester.test('cc');
+  assert.equal(result.status, 'warning');
+  assert.match(result.message, /未检查账号登录/u);
+});
+
 test('MCP self-check reads the tool catalog', async () => {
   const connection = { id: 'mcp', kind: 'mcp-remote', baseUrl: 'https://example.test/mcp', capabilities: ['tools'], options: {}, cachedModels: [] };
   const result = await harness(connection).tester.test('mcp');

@@ -14,7 +14,7 @@ literally running with no system instructions.
 | Engine | What the steward isolates | Known remainder |
 | --- | --- | --- |
 | Codex | Dedicated `CODEX_HOME`, copied local login token, empty working directory, no Desktop or repository `AGENTS.md` discovery | Codex platform/developer behavior remains |
-| Claude Code | Replaces the default system prompt, disables CLAUDE.md and auto-memory discovery, loads project settings only from the empty runtime directory, removes native tools by default | Model/platform behavior and managed organization policy remain |
+| Claude Code | Replaces the default system prompt, disables CLAUDE.md and auto-memory discovery, loads project settings from the empty runtime directory, and limits native MCP to an explicitly supplied config | Model/platform behavior and managed organization policy remain. The Bot's MCP switches apply to steward tools; native MCP has separate CLI permission rules |
 | Grok Build | Dedicated `GROK_HOME`, copied local login token, empty working directory, no memory/subagents/web/ask-user and an explicit built-in-tool deny list | Installed Grok skill summaries and environment metadata may still appear |
 
 The copied login files stay under the private data directory and are never

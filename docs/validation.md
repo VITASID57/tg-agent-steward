@@ -14,6 +14,9 @@ Last checked: 2026-11-10.
 - The offline suite covers the provider and tool routes with test doubles.
   Each installation still needs to verify its own accounts, entitlements and
   provider availability.
+- Claude Code CLI startup, stream completion, MCP configuration, and session
+  reset during a pending reply were checked with test doubles. The Claude Code
+  account and real model responses have not been exercised.
 
 ## Passed in this workspace
 

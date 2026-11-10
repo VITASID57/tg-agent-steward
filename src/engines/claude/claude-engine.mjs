@@ -5,6 +5,7 @@ import readline from 'node:readline';
 import { parseClaudeLine } from './parse-events.mjs';
 
 const TURN_TIMEOUT_MS = 5 * 60_000;
+const HELP_TIMEOUT_MS = 8_000;
 
 export class ClaudeEngine {
   id = 'claude';
@@ -47,9 +48,8 @@ export class ClaudeEngine {
     });
     const key = requestKey || sessionId || `new:${Date.now()}`;
     this.active.set(key, child);
-    child.stdin.end(`${JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'text', text: prompt }] } })}\n`);
     try {
-      return await collect(child, TURN_TIMEOUT_MS);
+      return await collect(child, prompt, TURN_TIMEOUT_MS);
     } finally {
       this.active.delete(key);
     }
@@ -96,13 +96,18 @@ export class ClaudeEngine {
     }
     if (claude.allowedTools?.length) args.push('--allowedTools', claude.allowedTools.join(','));
     if (claude.disallowedTools?.length) args.push('--disallowedTools', claude.disallowedTools.join(','));
-    if (claude.mcpConfigPath) args.push('--mcp-config', claude.mcpConfigPath, '--strict-mcp-config');
+    if (claude.mcpConfigPath || mode === 'chat') {
+      args.push('--strict-mcp-config', '--mcp-config', claude.mcpConfigPath || '{"mcpServers":{}}');
+    }
     if (sessionId) args.push('--resume', sessionId);
     return args;
   }
 
   #help() {
-    this.helpPromise ??= runHelp(this.spawnProcess, this.command);
+    this.helpPromise ??= runHelp(this.spawnProcess, this.command).catch((error) => {
+      this.helpPromise = null;
+      throw error;
+    });
     return this.helpPromise;
   }
 }
@@ -113,27 +118,46 @@ function runHelp(spawnProcess, command) {
     let output = '';
     child.stdout.on('data', (chunk) => { output += chunk; });
     child.stderr.on('data', (chunk) => { output += chunk; });
-    child.once('error', reject);
-    child.once('exit', (code) => code === 0 ? resolve(output) : reject(new Error(`claude --help 失败（${code}）`)));
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(new Error('Claude Code CLI 启动自检超时'));
+    }, HELP_TIMEOUT_MS);
+    child.once('error', (error) => { clearTimeout(timer); reject(startError(error)); });
+    child.once('close', (code) => {
+      clearTimeout(timer);
+      if (code === 0) resolve(output);
+      else reject(new Error(`claude --help 失败（${code}）`));
+    });
   });
 }
 
-function collect(child, timeoutMs) {
+function collect(child, prompt, timeoutMs) {
   return new Promise((resolve, reject) => {
     const state = { sessionId: null, parts: [], result: '', usage: null, costUsd: null, durationMs: null, error: null };
     let stderr = '';
     readline.createInterface({ input: child.stdout }).on('line', (line) => parseClaudeLine(line, state));
     child.stderr.on('data', (chunk) => { stderr += chunk; });
     const timer = setTimeout(() => { child.kill(); reject(new Error('Claude Code 回复超时')); }, timeoutMs);
-    child.once('error', (error) => { clearTimeout(timer); reject(error); });
-    child.once('exit', (code) => {
+    let inputError;
+    child.stdin.on('error', (error) => { inputError = error; });
+    child.once('error', (error) => { clearTimeout(timer); reject(startError(error)); });
+    child.once('close', (code) => {
       clearTimeout(timer);
       if (state.error) return reject(new Error(state.error));
       if (code !== 0) return reject(new Error(stderr.trim() || `Claude Code 已退出（${code}）`));
+      if (inputError) return reject(new Error('Claude Code 未能接收本轮消息'));
+      if (!state.completed) return reject(new Error('Claude Code 退出时没有返回本轮结果'));
       resolve({ text: (state.result || state.parts.join('')).trim(), sessionId: state.sessionId, usage: state.usage,
         costUsd: state.costUsd, durationMs: state.durationMs });
     });
+    child.stdin.end(`${JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'text', text: prompt }] } })}\n`);
   });
+}
+
+function startError(error) {
+  if (!['ENOENT', 'EINVAL'].includes(error.code)) return error;
+  const hint = process.platform === 'win32' ? ' Windows 请使用官方原生 claude.exe。' : '';
+  return new Error(`无法启动 Claude Code CLI。请在运行栖光庭的环境安装官方 CLI，或用 CLAUDE_COMMAND 指定可执行文件。${hint}`);
 }
 
 function safeName(value) { return String(value).replace(/[^a-zA-Z0-9._-]+/gu, '_').slice(0, 160) || 'default'; }

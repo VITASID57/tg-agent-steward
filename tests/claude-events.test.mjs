@@ -12,3 +12,10 @@ test('Claude stream parser keeps session, output, and usage', () => {
   assert.equal(state.usage.input_tokens, 3);
   assert.equal(state.costUsd, 0.01);
 });
+
+test('Claude result error subtypes preserve the error even without result text', () => {
+  const state = { parts: [] };
+  parseClaudeLine(JSON.stringify({ type: 'result', subtype: 'error_during_execution', errors: ['CLI turn failed'] }), state);
+  assert.equal(state.completed, true);
+  assert.equal(state.error, 'CLI turn failed');
+});

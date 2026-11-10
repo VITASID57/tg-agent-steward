@@ -208,6 +208,6 @@ function message(value) { const node = document.createElement('p'); node.classNa
 function runtimeNote(kind, mode) {
   if (mode === 'agent') return '会继承部署环境中该 CLI 的项目规则、用户设置、Skills 与原生工具，适合真正要读文件和执行任务的 Bot。人物档案会追加到原有环境。';
   if (kind === 'codex') return '使用独立 Codex Home 和专用空目录，不继承部署环境的全局／项目 AGENTS.md。';
-  if (kind === 'claude') return '替换 Claude Code 默认系统提示，关闭 CLAUDE.md、自动记忆和用户设置来源；订阅登录仍可用。';
+  if (kind === 'claude') return '替换 Claude Code 默认系统提示，关闭 CLAUDE.md 和自动记忆；原生 MCP 只加载明确填写的配置。认证由部署机上的官方 CLI 管理。';
   return '使用独立 Grok Home、专用空目录并拒绝内置工具；安装包自带 Skills 提示仍可能出现，且无法由管家关闭。';
 }
