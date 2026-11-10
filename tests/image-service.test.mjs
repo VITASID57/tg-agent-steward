@@ -66,6 +66,11 @@ test('Codex subscription images are collected from CODEX_HOME generated_images',
   }
 });
 
+test('Codex subscription image quota failures are reported instead of pretending a file went missing', async () => {
+  await assert.rejects(() => generateImageRoute({ connection: { kind: 'codex', options: {} }, route: {}, prompt: 'gentian',
+    runImpl: async () => ({ stdout: 'image generation failed: usage_limit_reached', stderr: '' }) }), /额度暂时用完/u);
+});
+
 function storedZip(name, data) {
   const filename = Buffer.from(name); const local = Buffer.alloc(30); local.writeUInt32LE(0x04034b50, 0); local.writeUInt16LE(20, 4);
   local.writeUInt32LE(data.length, 18); local.writeUInt32LE(data.length, 22); local.writeUInt16LE(filename.length, 26);

@@ -116,13 +116,20 @@ async function subscriptionImage({ connection, prompt, signal, runImpl }) {
     const args = connection.kind === 'codex'
       ? ['exec', '-s', 'workspace-write', '-C', folder, '--skip-git-repo-check', '--ephemeral', `$imagegen ${instruction}`]
       : ['--cwd', folder, '-p', `Use Grok Imagine. ${instruction}`];
-    await runImpl(command, args, { cwd: folder, env, signal, timeoutMs: Number(connection.options?.timeoutMs) || 240_000 });
+    const processResult = await runImpl(command, args, { cwd: folder, env, signal, timeoutMs: Number(connection.options?.timeoutMs) || 240_000 });
     const localFiles = await findImages(folder);
     const generatedFiles = generatedRoot ? await changedImages(generatedRoot, before) : [];
     const file = await newestImage([...localFiles, ...generatedFiles]);
-    if (!file) throw new Error('订阅生图完成但没有找到输出图片');
+    if (!file) throw subscriptionOutputError(connection.kind, processResult);
     return checked(await readFile(file));
   } finally { await rm(folder, { recursive: true, force: true }); }
+}
+function subscriptionOutputError(kind, result) {
+  const output = `${result?.stderr || ''}\n${result?.stdout || ''}`;
+  if (/usage_limit_reached|usage limit (?:has been )?reached/iu.test(output)) {
+    return new Error(`${kind === 'codex' ? 'Codex' : 'Grok'} 订阅生图额度暂时用完，额度恢复后可继续使用`);
+  }
+  return new Error('订阅生图完成但没有找到输出图片');
 }
 
 async function findImages(folder) {

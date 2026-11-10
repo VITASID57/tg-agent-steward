@@ -16,6 +16,7 @@ export function normalizeControlPlane(input, legacy = {}) {
   const imageProfiles = array(input.imageProfiles).map(normalizeImageProfile).filter(Boolean);
   const stickerPacks = array(input.stickerPacks).map(normalizeStickerPack).filter(Boolean);
   const connectionIds = new Set(connections.map((item) => item.id));
+  const connectionKinds = new Map(connections.map((item) => [item.id, item.kind]));
   const profileIds = new Set(profiles.map((item) => item.id));
   const voiceIds = new Set(voiceProfiles.map((item) => item.id));
   const imageIds = new Set(imageProfiles.map((item) => item.id));
@@ -27,6 +28,10 @@ export function normalizeControlPlane(input, legacy = {}) {
   for (const image of imageProfiles) {
     if (!connectionIds.has(image.primary?.connectionId)) image.primary = null;
     image.fallbacks = image.fallbacks.filter((route) => connectionIds.has(route.connectionId));
+    for (const route of [image.primary, ...image.fallbacks].filter(Boolean)) {
+      if (connectionKinds.get(route.connectionId) === 'codex') route.model = 'subscription-imagegen';
+      if (connectionKinds.get(route.connectionId) === 'grok-build') route.model = 'grok-imagine';
+    }
   }
   const bots = array(input.bots).map(normalizeBot).filter(Boolean).filter((bot) =>
     profileIds.has(bot.profileId) && (!bot.chat.connectionId || connectionIds.has(bot.chat.connectionId)));

@@ -81,6 +81,13 @@ test('existing provider presets gain newly supported capabilities during normali
   assert.deepEqual((await store.get()).connections.find((item) => item.id === codex.id).capabilities, ['chat', 'image']);
 });
 
+test('subscription image profiles use their real image route instead of a saved chat model', async () => {
+  const store = new ControlPlaneStore(memoryFile(), { async get() { return {}; } });
+  const codex = await store.upsertConnection({ name: 'Codex', kind: 'codex' });
+  const image = await store.upsertImageProfile({ name: '订阅生图', primary: { connectionId: codex.id, model: 'chat-model' }, fallbacks: [] });
+  assert.equal((await store.get()).imageProfiles.find((item) => item.id === image.id).primary.model, 'subscription-imagegen');
+});
+
 test('sticker packs are reusable and cannot be deleted while a bot references them', async () => {
   const store = new ControlPlaneStore(memoryFile(), { async get() { return {}; } });
   const created = await store.upsertStickerPack({ name: '日常表情', stickers: [{ id: 'hello', name: '你好', assetId: 'sticker-a.png' }] });
