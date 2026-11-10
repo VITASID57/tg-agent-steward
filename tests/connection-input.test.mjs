@@ -8,3 +8,8 @@ test('query secrets are moved out of the public connection URL', () => {
   assert.equal(result.body.options.authType, 'query'); assert.equal(result.body.options.authName, 'token');
   assert.equal(result.secret, 'private-value');
 });
+
+test('Vertex rejects a service-account email in the URL field', () => {
+  assert.throws(() => prepareConnectionInput({ kind: 'vertex-ai', baseUrl: 'bot@example.iam.gserviceaccount.com' }),
+    /服务账号邮箱不能填在这里/u);
+});
