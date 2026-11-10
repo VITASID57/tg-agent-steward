@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { normalizeBot, normalizeConnection, normalizeControlPlane, normalizeImageProfile, normalizeProfile, normalizeProfileBlock, normalizeStickerPack, normalizeVoiceProfile } from './validate.mjs';
 
 export class ControlPlaneStore {
@@ -14,8 +15,32 @@ export class ControlPlaneStore {
     return this.file.update((current) => normalizeControlPlane(current, legacy));
   }
 
-  async upsertConnection(input) {
-    return this.#upsert('connections', 'connection', input, normalizeConnection);
+  async upsertConnection(input, writeCredential = null) {
+    return this.#upsert('connections', 'connection', input, async (value, previous) => {
+      const options = { ...value.options };
+      if (previous?.kind === value.kind && previous.options.env && !Object.hasOwn(options, 'env')) options.env = previous.options.env;
+      const next = normalizeConnection({ ...value, options, lastTest: null });
+      if (!next) return null;
+      const credentialChanged = await writeCredential?.(next.id);
+      if (!credentialChanged && sameConnectionSettings(previous, next)) next.lastTest = previous.lastTest;
+      if (previous && Date.parse(next.updatedAt) <= Date.parse(previous.updatedAt)) {
+        next.updatedAt = new Date(Date.parse(previous.updatedAt) + 1).toISOString();
+      }
+      return next;
+    });
+  }
+
+  async recordConnectionTest(checked, result) {
+    await this.file.update((raw) => {
+      const state = normalizeControlPlane(raw);
+      const current = state.connections.find((item) => item.id === checked.id);
+      if (!current) throw Object.assign(new Error('找不到这个连接预设'), { statusCode: 404 });
+      if (current.updatedAt !== checked.updatedAt || current.createdAt !== checked.createdAt || !sameConnectionSettings(current, checked)) {
+        throw Object.assign(new Error('自检期间连接预设已更新，请重新自检'), { statusCode: 409 });
+      }
+      current.lastTest = normalizeConnection({ ...current, lastTest: result }).lastTest;
+      return state;
+    });
   }
 
   async upsertProfile(input) {
@@ -117,10 +142,10 @@ export class ControlPlaneStore {
     const legacy = await this.legacyStore?.get().catch(() => ({})) ?? {};
     const now = new Date().toISOString();
     let saved;
-    await this.file.update((raw) => {
+    await this.file.update(async (raw) => {
       const state = normalizeControlPlane(raw, legacy);
       const previous = state[key].find((item) => item.id === input.id);
-      saved = normalize({ ...input, id: input.id || `${prefix}-${randomUUID()}`,
+      saved = await normalize({ ...input, id: input.id || `${prefix}-${randomUUID()}`,
         createdAt: previous?.createdAt || now, updatedAt: now }, previous);
       if (!saved) throw Object.assign(new Error('无法保存这个预设'), { statusCode: 400 });
       return normalizeControlPlane({ ...state, [key]: replace(state[key], saved) });
@@ -141,6 +166,20 @@ export class ControlPlaneStore {
       return { ...state, [key]: state[key].filter((item) => item.id !== id) };
     });
   }
+}
+
+function sameConnectionSettings(left, right) {
+  return left?.kind === right.kind && left.baseUrl === right.baseUrl
+    && isDeepStrictEqual(probeOptions(left), probeOptions(right));
+}
+
+function probeOptions(connection) {
+  const defaults = {
+    runtimeMode: 'chat', apiStyle: 'chat-completions', authType: connection.kind === 'vertex-ai' ? 'api-key' : 'bearer',
+    sandbox: 'read-only', approvalPolicy: 'never', idleHours: 6, writeEnabled: false, accessMode: 'approval',
+  };
+  return Object.fromEntries(Object.entries(connection.options || {}).filter(([key, value]) =>
+    value !== '' && value != null && value !== defaults[key] && !(Array.isArray(value) && !value.length)));
 }
 
 function replace(items, value) {

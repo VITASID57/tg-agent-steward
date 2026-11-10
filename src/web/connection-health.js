@@ -1,26 +1,40 @@
 import { api, jsonBody } from './api.js';
 import { $ } from './dom.js';
+import { refreshResourceBrowsers } from './resource-browser.js';
 
-export function bindConnectionTest() {
-  $('#test-connection').onclick = runConnectionTest;
+let editorVersion = 0;
+
+export function bindConnectionTest(app) {
+  $('#test-connection').onclick = () => runConnectionTest(app);
 }
 
 export function fillConnectionTest(connection) {
+  editorVersion += 1;
   const button = $('#test-connection');
   button.disabled = !connection?.id;
-  render(connection?.lastTest || null, connection?.id ? '点击自检，不会发起付费生成请求。' : '先保存连接，再进行自检。');
+  button.textContent = '连接自检';
+  render(connection?.lastTest || null, connection?.id ? '自检使用已保存的设置，不发起生成请求。' : '先保存连接，再进行自检。');
 }
 
-async function runConnectionTest() {
+async function runConnectionTest(app) {
   const connectionId = $('#connection-id').value; if (!connectionId) return;
+  const version = editorVersion;
+  const checked = app.data.connections.find((item) => item.id === connectionId);
   const button = $('#test-connection'); button.disabled = true; button.textContent = '检测中…';
   render(null, '正在检查配置与可用入口…', 'testing');
   try {
     const result = await api('/api/connections/test', { method: 'POST', body: jsonBody({ connectionId }) });
-    render(result);
+    const current = app.data.connections.find((item) => item.id === connectionId);
+    if (current && current.updatedAt === checked?.updatedAt && (!current.lastTest || current.lastTest.at <= result.at)) {
+      current.lastTest = result;
+      refreshResourceBrowsers(app);
+    }
+    if (editorVersion === version) render(current?.lastTest || null, '连接设置已更新，请重新自检。');
   } catch (error) {
-    render({ status: 'failed', title: '自检请求失败', message: error.message, at: new Date().toISOString() });
-  } finally { button.disabled = false; button.textContent = '连接自检'; }
+    if (editorVersion === version) render(null, error.message);
+  } finally {
+    if (editorVersion === version) { button.disabled = false; button.textContent = '连接自检'; }
+  }
 }
 
 function render(result, fallback = '', forceStatus = '') {

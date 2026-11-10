@@ -29,8 +29,7 @@ export function createApiHandler(services) {
       return json(response, 200, await publicControlPlane(await controlPlaneStore.get(), secretStore, telegramService, wechatService, pairing), headers);
     }
     if (request.method === 'POST' && path === '/api/connections') {
-      const prepared = prepareConnectionInput(await readJson(request)); const saved = await controlPlaneStore.upsertConnection(prepared.body);
-      if (prepared.secret) await secretStore.write(`connection:${saved.id}`, prepared.secret);
+      const saved = await saveConnection(await readJson(request), controlPlaneStore, secretStore);
       return json(response, 201, await decorateConnection(saved, secretStore), headers);
     }
     if (request.method === 'POST' && path === '/api/connections/test') {
@@ -40,9 +39,7 @@ export function createApiHandler(services) {
     }
     const connectionId = resourceId(path, '/api/connections/');
     if (connectionId && request.method === 'PUT') {
-      const prepared = prepareConnectionInput({ ...(await readJson(request)), id: connectionId });
-      const saved = await controlPlaneStore.upsertConnection(prepared.body);
-      if (prepared.secret) await secretStore.write(`connection:${saved.id}`, prepared.secret);
+      const saved = await saveConnection({ ...(await readJson(request)), id: connectionId }, controlPlaneStore, secretStore);
       return json(response, 200, await decorateConnection(saved, secretStore), headers);
     }
     if (connectionId && request.method === 'DELETE') {
@@ -219,6 +216,16 @@ export function createApiHandler(services) {
     }
     throw Object.assign(new Error('接口不存在'), { statusCode: 404 });
   };
+}
+
+async function saveConnection(input, store, secretStore) {
+  const { body, secret } = prepareConnectionInput(input);
+  return store.upsertConnection(body, secret ? async (id) => {
+    const key = `connection:${id}`;
+    if (await secretStore.read(key) === secret) return false;
+    await secretStore.write(key, secret);
+    return true;
+  } : null);
 }
 
 function resourceId(path, prefix) {

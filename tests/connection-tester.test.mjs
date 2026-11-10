@@ -6,7 +6,7 @@ function harness(connection, { hasSecret = true, capability = { available: true,
   let saved;
   const controlPlaneStore = {
     async get() { return { connections: [saved || connection] }; },
-    async upsertConnection(value) { saved = structuredClone(value); return saved; },
+    async recordConnectionTest(value, result) { saved = structuredClone({ ...value, lastTest: result }); },
   };
   const tester = new ConnectionTester({ controlPlaneStore,
     secretStore: { async has() { return hasSecret; } },
@@ -34,6 +34,15 @@ test('Claude Code self-check distinguishes CLI availability from account access'
   const result = await harness(connection, { capability: { available: true, source: 'built-in', models: [{ id: 'sonnet' }] } }).tester.test('cc');
   assert.equal(result.status, 'warning');
   assert.match(result.message, /未检查账号登录/u);
+});
+
+test('saved models do not turn a failed provider catalog request into a successful check', async () => {
+  const connection = { id: 'api', kind: 'openai-compatible', baseUrl: 'https://example.test/v1', capabilities: ['chat'] };
+  const result = await harness(connection, { capability: { available: true, source: 'saved',
+    liveError: 'API HTTP 403', models: [{ id: 'cached-model' }] } }).tester.test('api');
+  assert.equal(result.status, 'warning');
+  assert.equal(result.title, '实时模型目录未读通');
+  assert.match(result.message, /403/u);
 });
 
 test('MCP self-check reads the tool catalog', async () => {

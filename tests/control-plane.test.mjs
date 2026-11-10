@@ -28,6 +28,32 @@ test('connection presets are reusable and cannot be deleted while referenced', a
   assert.equal((await store.get()).connections.find((item) => item.id === codex.id).name, 'shared connection');
 });
 
+test('connection self-check persists across ordinary saves without revising the live connection', async () => {
+  const store = new ControlPlaneStore(memoryFile());
+  const original = await store.upsertConnection({ kind: 'vertex-ai', baseUrl: 'https://example.test/v1' });
+  const report = { status: 'passed', ok: true, title: '目录已通过', message: '测试详情', at: '2026-11-10T10:00:00.000Z' };
+  await store.recordConnectionTest(original, report);
+  const afterTest = (await store.get()).connections[0];
+  assert.equal(afterTest.updatedAt, original.updatedAt);
+  const { lastTest, ...editorInput } = afterTest;
+  const saved = await store.upsertConnection({ ...editorInput, name: '改名', cachedModels: ['new-model'], options: {
+    authType: 'api-key', runtimeMode: 'chat', apiStyle: 'chat-completions', authName: '', idleHours: 6,
+    sandbox: 'read-only', approvalPolicy: 'never', args: [], writeEnabled: false, accessMode: 'approval',
+  } });
+  assert.deepEqual(saved.lastTest, report);
+  assert.deepEqual((await store.get()).connections[0].lastTest, report);
+  const changed = await store.upsertConnection({ ...saved, options: { ...saved.options, authType: 'bearer' } });
+  assert.equal(changed.lastTest, null);
+  await assert.rejects(store.recordConnectionTest(saved, report), { statusCode: 409 });
+  assert.equal((await store.get()).connections[0].options.authType, 'bearer');
+  await store.recordConnectionTest(changed, report);
+  const rotated = await store.upsertConnection(changed, async () => true);
+  assert.equal(rotated.lastTest, null);
+  await store.removeConnection(rotated.id);
+  await assert.rejects(store.recordConnectionTest(rotated, report), { statusCode: 404 });
+  assert.deepEqual((await store.get()).connections, []);
+});
+
 test('the control plane preserves one bot so the UI always has a recovery path', async () => {
   const store = new ControlPlaneStore(memoryFile(), { async get() { return {}; } });
   await assert.rejects(store.removeBot('bot-default'), /至少要保留一个 Bot/);

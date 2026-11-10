@@ -15,7 +15,7 @@ export class ConnectionTester {
     try { result = await this.#run(connection); }
     catch (error) { result = report('failed', '连接没有通过自检', safe(error)); }
     const stamped = { ...result, at: this.now().toISOString() };
-    await this.controlPlaneStore.upsertConnection({ ...connection, lastTest: stamped });
+    await this.controlPlaneStore.recordConnectionTest(connection, stamped);
     return stamped;
   }
 
@@ -42,6 +42,7 @@ export class ConnectionTester {
       if (CLI_KINDS.has(connection.kind) || LIVE_SOURCES.has(capability.source)) {
         return report('passed', '连接已通过实时自检', modelCount ? `运行入口可用，并读取到 ${modelCount} 个模型。` : '运行入口可用。');
       }
+      if (capability.liveError) return report('warning', '实时模型目录未读通', safe(capability.liveError));
       return report('warning', '基础配置已就绪', modelCount
         ? `当前使用保存或内置目录（${modelCount} 个模型），未完成提供方实时验证。`
         : '配置已保存，但这类连接没有安全的统一探测接口；请在实际使用后确认。');

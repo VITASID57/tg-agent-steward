@@ -41,6 +41,24 @@ test('Vertex connection can use an OAuth bearer token', async () => {
   assert.equal(authorization, 'Bearer oauth-token');
 });
 
+test('Vertex distinguishes capacity errors, blocked or incomplete output, and visible text', async () => {
+  const responses = [
+    Response.json({ error: { message: 'Resource exhausted. See https://example.test/' } }, { status: 429 }),
+    Response.json({ promptFeedback: { blockReason: 'PROHIBITED_CONTENT' } }),
+    Response.json({ candidates: [{ finishReason: 'MAX_TOKENS', content: { parts: [{ text: 'private thought', thought: true }] } }] }),
+    Response.json({ candidates: [{ content: { parts: [{ text: 'private thought', thought: true }, { text: 'visible' }] } }] }),
+    Response.json({}),
+  ];
+  const engine = new HttpChatEngine({ connection: { id: 'vertex', kind: 'vertex-ai', baseUrl: 'https://vertex.test', options: {} },
+    secret: 'test-key', sessions: sessions(), fetchImpl: async () => responses.shift() });
+  const run = () => engine.complete({ prompt: 'hi', instructions: 'system', settings: { model: 'gemini-test' } });
+  await assert.rejects(run(), { message: /^Vertex AI HTTP 429：[^/]+$/u });
+  await assert.rejects(run(), /PROHIBITED_CONTENT/u);
+  await assert.rejects(run(), /MAX_TOKENS/u);
+  assert.equal((await run()).text, 'visible');
+  await assert.rejects(run(), /Google 未提供原因/u);
+});
+
 test('Vertex OAuth follows regional publisher catalog pagination without mixing built-in candidates', async () => {
   const requested = [];
   const engine = new HttpChatEngine({ connection: { id: 'vertex', kind: 'vertex-ai',

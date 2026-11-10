@@ -32,7 +32,7 @@ export function bindEditors(app) {
   $('#new-connection').onclick = () => fillConnection(app, '');
   $('#connection-form').onsubmit = (event) => saveConnection(event, app);
   bindConnectionCatalog();
-  bindConnectionTest();
+  bindConnectionTest(app);
   bindBotCards(app, fillBot); bindBotSections(); bindBotAvatar();
   bindToolSwitches();
   bindWechatEditor(app, () => saveBotDraft(app));

@@ -98,10 +98,11 @@ export class HttpChatEngine {
     const data = await requestJson(this.fetch, url, {
       method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ systemInstruction: { parts: [{ text: session.instructions }] }, contents, generationConfig }),
-    }, signal);
-    const text = data?.candidates?.[0]?.content?.parts?.filter((part) => typeof part?.text === 'string').map((part) => part.text).join('') ?? '';
-    if (!text.trim()) throw new Error('Vertex AI 没有返回可用文字');
-    return text.trim();
+    }, signal).catch((error) => {
+      if (error.httpStatus === 429) throw new Error('Vertex AI HTTP 429：当前模型容量不足或请求触及限流，请稍后再试。');
+      throw error;
+    });
+    return vertexReplyText(data);
   }
 
   async #liveModels(purpose) {
@@ -172,7 +173,8 @@ async function requestJson(fetchImpl, url, init, signal, timeoutMs = TIMEOUT_MS)
   try {
     const response = await fetchImpl(url, { ...init, signal: controller.signal });
     const data = await response.json().catch(() => null);
-    if (!response.ok) throw new Error(`API HTTP ${response.status}${data?.error?.message ? `：${data.error.message}` : ''}`);
+    if (!response.ok) throw Object.assign(new Error(`API HTTP ${response.status}${data?.error?.message ? `：${data.error.message}` : ''}`),
+      { httpStatus: response.status });
     return data;
   } catch (error) {
     if (timedOut) throw new Error('API 请求超时');
@@ -184,6 +186,19 @@ async function requestJson(fetchImpl, url, init, signal, timeoutMs = TIMEOUT_MS)
 function endpoint(base, suffix) {
   const value = base.replace(/\/+$/u, '');
   return value.endsWith(suffix) ? value : `${value}${suffix}`;
+}
+
+function vertexReplyText(data) {
+  const candidate = data?.candidates?.[0];
+  const parts = candidate?.content?.parts;
+  const text = (Array.isArray(parts) ? parts : []).filter((part) => part?.thought !== true && typeof part?.text === 'string')
+    .map((part) => part.text).join('').trim();
+  if (text) return text;
+  const reason = data?.promptFeedback?.blockReason || candidate?.finishReason;
+  if (typeof reason === 'string' && /^[A-Z][A-Z0-9_]{0,63}$/u.test(reason)) {
+    throw new Error(`Vertex AI 未返回正文（Google 原因：${reason}）`);
+  }
+  throw new Error('Vertex AI 未返回正文，Google 未提供原因。');
 }
 function elevenLabsEndpoint(base, suffix) {
   const value = String(base || '').replace(/\/+$/u, '');
