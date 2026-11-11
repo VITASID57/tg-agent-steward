@@ -3,12 +3,14 @@ import { json } from '../http/responses.mjs';
 import { normalizeSettings } from '../config/validate.mjs';
 import { normalizeConnection } from '../control/validate.mjs';
 import { prepareConnectionInput } from '../control/connection-input.mjs';
+import { mimiTownTokenPath } from './mimi-town-import.mjs';
 
 export function createApiHandler(services) {
   const { settingsStore, personaStore, controlPlaneStore, secretStore, manager, engines, pairing, telegramService, wechatService,
-    stickerAssetStore, toolBroker, wakeService, eventStore, connectionTester } = services;
+    stickerAssetStore, toolBroker, wakeService, eventStore, connectionTester, mimiTown } = services;
   return async (request, response, url, headers) => {
     const path = url.pathname;
+    if (mimiTown && path === mimiTownTokenPath) return await mimiTown.manage(request, response, headers);
     if (request.method === 'GET' && path === '/api/status') {
       const [controlPlane, persona, usage, runtime] = await Promise.all([
         controlPlaneStore.get(), personaStore.get(), manager.usage().catch(() => null), manager.runtimeStatus(),

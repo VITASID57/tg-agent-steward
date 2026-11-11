@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createApiHandler } from './api/api-handler.mjs';
+import { createMimiTownImport } from './api/mimi-town-import.mjs';
 import { cloneDefaults } from './config/defaults.mjs';
 import { ControlPlaneStore } from './control/control-plane-store.mjs';
 import { ConnectionTester } from './control/connection-tester.mjs';
@@ -94,7 +95,8 @@ const wakeService = new WakeService({ controlPlaneStore,
     ? wechatService.proactive(botId, targetId, prompt, context)
     : telegramService.proactive(botId, targetId, prompt, context),
 });
-const services = { settingsStore, personaStore, controlPlaneStore, secretStore, manager, engines, pairing,
+const mimiTown = createMimiTownImport({ controlPlaneStore, secretStore });
+const services = { settingsStore, personaStore, controlPlaneStore, secretStore, manager, engines, pairing, mimiTown,
   telegramService, wechatService, imageService, stickerAssetStore, toolBroker, wakeService, eventStore, connectionTester };
 
 const host = process.env.TG_STEWARD_HOST || '127.0.0.1';
@@ -108,7 +110,7 @@ allowedOrigins.add(`http://${host}:${port}`);
 allowedOrigins.add(`http://localhost:${port}`);
 
 const server = await startHttpServer({
-  host, port, allowedOrigins, authRequired: authMode !== 'none',
+  host, port, allowedOrigins, mimiTown, authRequired: authMode !== 'none',
   authenticate: authMode === 'none' ? () => {} : bearerAuth(adminToken),
   apiHandler: createApiHandler(services), serveStatic: staticFiles(join(root, 'src', 'web')),
 });

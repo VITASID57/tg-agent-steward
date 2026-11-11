@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>栖光庭</title>
+  <style>
+    :root { color-scheme: light; --surface: #fff; --text: #24342e; --border: #bac6be; --accent: #567564; }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body { margin: 0; background: var(--surface); color: var(--text); font: 15px/1.55 system-ui, sans-serif; }
+    main { max-width: 34rem; margin-inline: auto; padding: 16px; }
+    h2 { margin: 0; font-size: 18px; line-height: 1.4; }
+    p { margin: 0; overflow-wrap: anywhere; }
+    section { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--border); border-radius: 14px; }
+    section + section { margin-top: 12px; }
+    .field { display: grid; gap: 5px; min-width: 0; }
+    input, button { min-height: 44px; border: 1px solid var(--border); border-radius: 9px; font: inherit; color: inherit; }
+    input { width: 100%; padding: 8px 10px; background: var(--surface); font-size: 16px; }
+    button { padding: 8px 14px; background: var(--surface); cursor: pointer; }
+    button.primary { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 17%, var(--surface)); font-weight: 650; }
+    button:disabled { opacity: .65; cursor: default; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .connection-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .actions button { flex: 1 1 auto; padding-inline: 8px; }
+    .actions:has(#forget-token:not([hidden])) { gap: 6px; }
+    .actions:has(#forget-token:not([hidden])) button { font-size: 13px; padding-inline: 5px; }
+    footer { display: grid; justify-items: start; gap: 4px; padding: 15px 2px 0; font-size: 14px; }
+    footer button { padding-inline: 0; border-color: transparent; text-decoration: underline; text-underline-offset: 3px; }
+  </style>
+</head>
+<body>
+  <main>
+    <section aria-labelledby="connection-title">
+      <div class="connection-heading">
+        <h2 id="connection-title">连接栖光庭</h2>
+        <p id="connection-status" role="status">正在载入…</p>
+      </div>
+      <label class="field" for="address" id="address-field">栖光庭地址<input id="address" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" disabled></label>
+      <label class="field" for="token" id="token-field" hidden>小镇导入口令<input id="token" type="password" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+      <div class="actions">
+        <button type="button" id="connect" class="primary" disabled>连接</button>
+        <button type="button" id="open-settings" hidden>打开栖光庭</button>
+        <button type="button" id="change-address" hidden>更换地址</button>
+        <button type="button" id="forget-token" hidden>忘记口令</button>
+      </div>
+    </section>
+    <section aria-label="人设">
+      <button type="button" id="sync" class="primary" disabled>从小镇导入人设</button>
+      <p id="sync-status" role="status" hidden></p>
+      <button type="button" id="open-profile" hidden>打开人物档案</button>
+    </section>
+    <footer id="deployment">
+      <p>栖光庭需要部署在常在线的电脑或云服务器上。</p>
+      <button type="button" id="open-guide" disabled>部署说明</button>
+    </footer>
+  </main>
+  <script>
+    const byId = id => document.getElementById(id);
+    const address = byId('address');
+    const token = byId('token');
+    const connect = byId('connect');
+    const sync = byId('sync');
+    const guide = byId('open-guide');
+    const settings = byId('open-settings');
+    const changeAddress = byId('change-address');
+    const forgetToken = byId('forget-token');
+    const profile = byId('open-profile');
+    const connectionStatus = byId('connection-status');
+    const syncStatus = byId('sync-status');
+    const guideUrl = new URL('https://github.com/VITASID57/tg-wechat-agent-steward/blob/main/docs/deployment.md');
+    const api = '/api/integrations/mimi-town';
+    let allowed = [];
+    let connected = false;
+    let busy = false;
+    let profileId = '';
+    let saved = { address: '', token: '' };
+
+    function originFromInput() {
+      try {
+        const url = new URL(address.value.trim());
+        if (['http:', 'https:'].includes(url.protocol) && !url.username && !url.password
+          && url.pathname === '/' && !url.search && !url.hash) return url.origin;
+      } catch {}
+      return '';
+    }
+
+    function render() {
+      const approved = allowed.includes(originFromInput());
+      byId('address-field').hidden = connected;
+      byId('token-field').hidden = !approved || connected;
+      byId('deployment').hidden = approved;
+      settings.hidden = !approved;
+      changeAddress.hidden = !connected;
+      forgetToken.hidden = !saved.token;
+      connect.textContent = connected ? '重新检查' : '连接';
+      connect.classList.toggle('primary', !connected);
+      address.disabled = token.disabled = connect.disabled = guide.disabled = settings.disabled = changeAddress.disabled = busy;
+      forgetToken.disabled = busy;
+      sync.disabled = busy || !connected;
+      profile.hidden = !profileId || !approved;
+    }
+
+    function showSync(message) {
+      syncStatus.textContent = message;
+      syncStatus.hidden = !message;
+    }
+
+    function resetConnection(clearToken = false) {
+      connected = false;
+      profileId = '';
+      if (clearToken) token.value = '';
+      showSync('');
+      connectionStatus.textContent = '未连接';
+      render();
+    }
+
+    async function saveConnection(origin, importToken = '') {
+      if (saved.address === origin && saved.token === importToken) return;
+      await mimiTown.storage.set(importToken ? { address: origin, token: importToken } : { address: origin });
+      saved = { address: origin, token: importToken };
+    }
+
+    async function request(origin, path, importToken, payload) {
+      const response = await fetch(`${origin}${api}${path}`, {
+        method: payload ? 'POST' : 'GET',
+        headers: payload ? { Authorization: `Bearer ${importToken}`, 'Content-Type': 'application/json' }
+          : { Authorization: `Bearer ${importToken}` },
+        body: payload ? JSON.stringify(payload) : undefined,
+        cache: 'no-store', credentials: 'omit', redirect: 'error', signal: AbortSignal.timeout(12000),
+      });
+      if (!response.ok) throw Object.assign(new Error('请求失败'), { status: response.status });
+      return await response.json();
+    }
+
+    async function showConnectionError(error, origin) {
+      connected = false;
+      if (error.status !== 401) {
+        connectionStatus.textContent = '连不上栖光庭，请检查地址和网络。';
+        return;
+      }
+      token.value = '';
+      profileId = '';
+      showSync('');
+      connectionStatus.textContent = '口令不对';
+      if (saved.address === origin) {
+        try { await saveConnection(origin); }
+        catch { connectionStatus.textContent = '口令不对，未能清除已保存的口令。'; }
+      }
+    }
+
+    async function checkConnection(origin, importToken) {
+      try {
+        const result = await request(origin, '/status', importToken);
+        if (result.ok !== true) throw new Error('状态接口响应不正确');
+        connected = true;
+        connectionStatus.textContent = '已连上';
+        return true;
+      } catch (error) {
+        await showConnectionError(error, origin);
+        return false;
+      }
+    }
+
+    connect.onclick = async () => {
+      const origin = originFromInput();
+      if (!origin) { connectionStatus.textContent = '请输入有效的栖光庭地址。'; address.focus(); return; }
+      if (allowed.includes(origin) && !token.value.trim()) {
+        connectionStatus.textContent = '请填写小镇导入口令。'; token.focus(); return;
+      }
+      busy = true;
+      connectionStatus.textContent = '正在连接…';
+      render();
+      try {
+        address.value = origin;
+        if (!allowed.includes(origin)) {
+          if (saved.address !== origin) await saveConnection(origin);
+          await mimiTown.network.allow({ origin });
+        } else {
+          const importToken = token.value.trim();
+          if (await checkConnection(origin, importToken)) {
+            try { await saveConnection(origin, importToken); }
+            catch { connectionStatus.textContent = '已连上，口令未保存。'; }
+          }
+        }
+      } catch {
+        connectionStatus.textContent = '连接未授权，请重试。';
+      } finally { busy = false; render(); }
+    };
+
+    sync.onclick = async () => {
+      const origin = originFromInput();
+      const importToken = token.value.trim();
+      busy = true;
+      profileId = '';
+      showSync('');
+      render();
+      try {
+        if (!await checkConnection(origin, importToken)) return;
+        const pack = await mimiTown.residents.readPack({ parts: ['persona'] }).catch(() => null);
+        if (!pack?.persona) { showSync('未导入人设。'); return; }
+        showSync('正在导入…');
+        const { schemaVersion, resident, persona } = pack;
+        const imported = await request(origin, '/profiles', importToken, { schemaVersion, resident, persona });
+        if (!/^profile-[a-z0-9-]+$/.test(imported.id) || typeof imported.name !== 'string') throw new Error('导入响应不正确');
+        profileId = imported.id;
+        showSync(`已在栖光庭新建《${imported.name}》。`);
+      } catch (error) {
+        if (error.status === 401) await showConnectionError(error, origin);
+        else showSync(error.status ? '导入失败，请检查连接后重试。' : '未收到导入结果，请先到栖光庭查看人物档案。');
+      } finally { busy = false; render(); }
+    };
+
+    function open(url, report) {
+      void mimiTown.network.open({ url }).catch(() => report('暂时无法打开网页。'));
+    }
+    settings.onclick = () => open(`${originFromInput()}/#mimi-town-import`, text => { connectionStatus.textContent = text; });
+    profile.onclick = () => open(`${originFromInput()}/#profiles/${profileId}`, showSync);
+    guide.onclick = () => {
+      if (allowed.includes(guideUrl.origin)) {
+        open(guideUrl.href, text => { connectionStatus.textContent = text; });
+      } else {
+        void mimiTown.network.allow({ origin: guideUrl.origin }).catch(() => {
+          connectionStatus.textContent = '请先同意打开部署说明。';
+        });
+      }
+    };
+    address.oninput = () => resetConnection(true);
+    token.oninput = () => resetConnection();
+    changeAddress.onclick = () => { resetConnection(true); address.focus(); };
+    forgetToken.onclick = async () => {
+      busy = true;
+      render();
+      try {
+        await saveConnection(saved.address);
+        resetConnection(true);
+        connectionStatus.textContent = '已忘记口令';
+      } catch { connectionStatus.textContent = '暂时无法忘记口令，请重试。'; }
+      finally { busy = false; render(); }
+    };
+    for (const input of [address, token]) input.onkeydown = event => {
+      if (event.key === 'Enter') { event.preventDefault(); connect.click(); }
+    };
+    document.addEventListener('visibilitychange', async () => {
+      if (document.hidden || !connected || busy) return;
+      busy = true;
+      render();
+      try { await checkConnection(originFromInput(), token.value.trim()); }
+      finally { busy = false; render(); }
+    });
+
+    async function init() {
+      let ready = false;
+      try {
+        const host = await mimiTown.ready();
+        for (const key of ['surface', 'text', 'border', 'accent']) {
+          if (host.theme?.[key]) document.documentElement.style.setProperty(`--${key}`, host.theme[key]);
+        }
+        document.documentElement.style.colorScheme = host.theme?.mode === 'dark' ? 'dark' : 'light';
+        if (host.preview) { connectionStatus.textContent = '安装后即可连接栖光庭。'; return; }
+        allowed = host.network ?? [];
+        const data = await mimiTown.storage.get();
+        ready = true;
+        address.value = typeof data?.address === 'string' ? data.address : '';
+        const origin = originFromInput();
+        saved = { address: origin, token: origin && typeof data?.token === 'string' ? data.token : '' };
+        if (!allowed.includes(origin)) {
+          connectionStatus.textContent = address.value ? '连接未授权' : '未连接';
+        } else if (saved.token) {
+          busy = true;
+          connectionStatus.textContent = '正在连接…';
+          token.value = saved.token;
+          render();
+          await checkConnection(origin, saved.token);
+        } else { connectionStatus.textContent = '请填写小镇导入口令。'; }
+      } catch { connectionStatus.textContent = '暂时无法载入插件，请重新打开。'; }
+      finally { busy = false; if (ready) render(); }
+    }
+    void init();
+  </script>
+</body>
+</html>

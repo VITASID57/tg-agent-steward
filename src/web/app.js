@@ -4,6 +4,8 @@ import { bindEditors, fillEditors } from './editors.js';
 import { initMotion, revealWorkspace, showPage } from './motion.js';
 import { openBotDetail, openBotEditor } from './bot-cards.js';
 import { extraChannelLabel } from './bot-channel-label.js';
+import { bindMimiTownImport } from './mimi-town-import.js';
+import { openResourceDetail } from './resource-browser.js';
 
 const app = { data: null, reload };
 let authRequired = true;
@@ -27,7 +29,10 @@ for (const button of $$('[data-tab]')) button.onclick = () => showPage(button.da
 for (const button of $$('[data-goto]')) button.onclick = () => showPage(button.dataset.goto);
 $('.brand').onclick = (event) => { event.preventDefault(); if (!$('#app').hidden) showPage('overview'); };
 const initialPage = location.hash.slice(1);
+const linkedProfile = /^profiles\/(profile-[a-z0-9-]+)$/.exec(initialPage)?.[1];
+const refreshMimiTownImport = bindMimiTownImport();
 if ($$('[data-tab]').some((button) => button.dataset.tab === initialPage)) showPage(initialPage, false);
+if (linkedProfile) showPage('profiles', false);
 boot();
 
 async function boot() {
@@ -48,7 +53,10 @@ async function connect() {
   $('#connection-pill b').textContent = '连接中';
   try {
     await reload();
+    if (linkedProfile && app.data.profiles.some(({ id }) => id === linkedProfile)) openResourceDetail('profiles', linkedProfile);
     revealWorkspace();
+    if (initialPage === 'mimi-town-import') $('#mimi-town-import').scrollIntoView({ block: 'start' });
+    void refreshMimiTownImport();
     $('#forget-login').hidden = !authRequired;
     $('#connection-pill').classList.add('online'); $('#connection-pill b').textContent = '已连接';
   } catch (error) {

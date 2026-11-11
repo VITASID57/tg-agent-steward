@@ -1,7 +1,7 @@
-export function corsHeaders(request, allowedOrigins) {
+export function corsHeaders(request, allowedOrigins, allowOpaqueOrigin = false) {
   const origin = request.headers.origin;
   if (!origin) return {};
-  if (!sameOrigin(request, origin) && !allowedOrigins.has(origin)) {
+  if (!(allowOpaqueOrigin && origin === 'null') && !sameOrigin(request, origin) && !allowedOrigins.has(origin)) {
     throw Object.assign(new Error(`不允许的网页来源：${origin}`), { statusCode: 403 });
   }
   return {

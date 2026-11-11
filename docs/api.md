@@ -72,6 +72,19 @@ Vertex 使用 API Key 时，常规模型请求展示按用途整理的候选。�
 `/api/status`、`/api/settings` 和旧版人物接口暂时保留，供 v0.1 客户端迁移；新
 前端应使用 `/api/control-plane` 与资源接口。
 
+## 棉棉云小镇人设导入
+
+`/api/integrations/mimi-town/token` 走原有管理鉴权。`GET` 查看是否启用，`POST` 生成或更换口令，`DELETE` 撤销。口令只在生成时返回一次，服务端只保存摘要。
+
+以下接口使用小镇导入口令作为 Bearer Token。无效或已撤销的口令返回 `401`。
+
+| Method | Route | Purpose |
+| --- | --- | --- |
+| GET | `/api/integrations/mimi-town/status` | 校验导入口令，成功返回 `{ "ok": true }` |
+| POST | `/api/integrations/mimi-town/profiles` | 接收小镇确认后的 `{ schemaVersion: 1, resident, persona }`，新建人物档案，返回 `{ id, name }` |
+
+这两个接口及 `/healthz` 接受小镇沙盒页面的 `Origin: null`。已有管理接口沿用原跨域设置。每次成功导入都生成一份独立档案，由用户在 Bot 设置中选择使用。
+
 ## 密钥规则
 
 - `secret`、`telegramToken` 与微信扫码账号凭据只写不读；响应只返回

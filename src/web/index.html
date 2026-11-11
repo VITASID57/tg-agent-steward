@@ -25,6 +25,13 @@
       <section class="tab-page active" data-page="overview">
         <div class="metric-grid"><article class="metric"><span>连接预设</span><strong id="count-connections">0</strong><small>凭据集中保存</small></article><article class="metric"><span>消息 Bot</span><strong id="count-bots">0</strong><small id="running-bots">0 个运行中</small></article><article class="metric metric-modules"><span>内容模块</span><div id="count-profiles" class="metric-module-grid"><small><b data-module-count="profiles">0</b><i>人物</i></small><small><b data-module-count="voices">0</b><i>声音</i></small><small><b data-module-count="images">0</b><i>生图</i></small><small><b data-module-count="stickers">0</b><i>表情</i></small></div></article></div>
         <article class="panel"><div class="panel-heading"><div><p class="eyebrow">RUNTIME</p><h2>Bot 状态</h2></div><div class="button-row"><button id="refresh-button" class="quiet">刷新</button><button type="button" data-goto="bots" class="quiet">全部 Bot</button></div></div><div id="bot-monitor-cards" class="bot-monitor-cards"></div></article>
+        <article class="panel" id="mimi-town-import" aria-labelledby="mimi-town-title">
+          <div class="panel-heading"><h2 id="mimi-town-title">小镇导入口令</h2></div>
+          <p class="hint">供棉棉云小镇插件新建人物档案。</p>
+          <div class="button-row"><button type="button" id="mimi-town-generate" disabled>生成口令</button><button type="button" id="mimi-town-revoke" class="quiet" hidden>撤销口令</button></div>
+          <div id="mimi-town-token-result" hidden><label for="mimi-town-token">导入口令</label><div class="password-field"><input id="mimi-town-token" readonly autocomplete="off" spellcheck="false"><button type="button" id="mimi-town-copy">复制</button></div></div>
+          <p id="mimi-town-status" class="hint" role="status"></p>
+        </article>
       </section>
       <section class="tab-page" data-page="connections">
         <form class="panel" id="connection-form"><div class="panel-heading"><div><p class="eyebrow">CONNECTION VAULT</p><h2>连接预设</h2></div><button type="button" id="new-connection">新建</button></div><p>填写服务地址和凭据，再保存连接。</p>

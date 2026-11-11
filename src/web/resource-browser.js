@@ -16,6 +16,10 @@ export function resourceSaved(key, id) {
   if (browser) browser.saved(id);
 }
 
+export function openResourceDetail(key, id) {
+  browsers.get(key)?.openDetail(id);
+}
+
 function createBrowser(app, definition) {
   const form = $(definition.form); const original = [...form.children];
   const editor = document.createElement('fieldset'); editor.className = 'resource-editor'; editor.hidden = true; editor.disabled = true;
@@ -92,7 +96,7 @@ function createBrowser(app, definition) {
     detail.facts.replaceChildren(...definition.facts(currentApp.data, item).map(([label, value]) => fact(label, value)));
   }
   render();
-  return { refresh, saved };
+  return { refresh, saved, openDetail };
 }
 
 function listView(definition) {
