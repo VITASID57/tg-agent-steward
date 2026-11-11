@@ -13,6 +13,6 @@
   "installation": ["小镇插件包（一键安装）", "需要自己部署栖光庭"],
   "version": "0.4.0",
   "package": "lumenkeep.mimi-app.json",
-  "sha256": "229d46c42172eca347022c45fc92f99243679e0845fa59ad7b84857a5b5030c5",
+  "sha256": "c9fda5e76be1a091e138f920f6318e855cb0904fb98d806b5dbfa530e39d0358",
   "screenshot": "preview-mobile.png"
 }

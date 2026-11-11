@@ -12,4 +12,4 @@
 
 修改 `page.html` 后，在仓库根目录运行 `node integrations/mimi-town/build.mjs` 生成插件包。本插件沿用仓库的 [PolyForm Noncommercial 许可](../../LICENSE)。
 
-`lumenkeep.mimi-app.json`（`0.4.0`）的 SHA-256 为 `229d46c42172eca347022c45fc92f99243679e0845fa59ad7b84857a5b5030c5`。
+`lumenkeep.mimi-app.json`（`0.4.0`）的 SHA-256 为 `c9fda5e76be1a091e138f920f6318e855cb0904fb98d806b5dbfa530e39d0358`。
